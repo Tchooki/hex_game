@@ -1,7 +1,6 @@
 """
 Hex Game Graphics
 """
-
 from typing import List, Tuple, Optional
 from math import tan, cos, sin, sqrt, pi
 from collections import OrderedDict
@@ -11,6 +10,8 @@ import numpy as np
 import pygame
 import pygame.gfxdraw
 from pygame import Surface
+
+from game.board import Board
 
 class HexBoard:
     """Print 2D board
@@ -30,7 +31,7 @@ class HexBoard:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        self.board = [[-1]*n for _ in range(n)]
+        self.board = Board(self.n)
         self.pawn_dict = OrderedDict()
 
         self.hex_pos : List[List[Tuple[float, float]]] = [[(0,0)] * self.n for _ in range(self.n)]
@@ -54,6 +55,7 @@ class HexBoard:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.can_play and self.hover_index and self.hover_index not in self.pawn_dict:
                     self.pawn_dict[self.hover_index] = self.turn
+                    self.board.play(self.hover_index, 'white' if self.turn == 0 else 'black')
                     self.turn = 1-self.turn
 
     def update_window(self,
@@ -231,7 +233,7 @@ class HexBoard:
             text_rect = digits[i].get_rect(right=pos[0], centery=pos[1])
             self.screen.blit(digits[i], text_rect)
 
-    def _draw_hex(self):
+    def _draw_hex(self, debug = False):
         """Draw hexagones
         """
 
@@ -257,7 +259,16 @@ class HexBoard:
                     ))
                 pygame.draw.polygon(self.screen, (0,0,0), points)
                 pygame.draw.polygon(self.screen, (241, 219,170), points_inside)
-                # pygame.draw.circle(surface,(255,0,0), coords, 5)
+
+
+    def _draw_debug(self):
+        font = pygame.font.SysFont("Liberation Serif", int(self.diamond_height/(2*self.n)))
+        for i in range(self.n):
+            for j in range(self.n):
+                color = (0, 0, 0) if self.board[i,j] >= 0 else (255, 255, 255)
+                num = font.render(str(self.board[i,j]), True, color)
+                text_rect = num.get_rect(center=self.hex_pos[i][j])
+                self.screen.blit(num, text_rect)
 
     def _draw_pawn(self):
         """Draw pawns"""
@@ -284,25 +295,27 @@ class HexBoard:
             pygame.draw.circle(self.screen, color, self.hex_pos[i][j], self.hex_radius/1.5)
 
 
-    def draw_board(self):
+    def draw_board(self, debug=False):
         """Draw board
         """
         self._draw_bg()
         self._draw_text()
         self._draw_hex()
         self._draw_pawn()
+        if debug:
+            self._draw_debug()
 
-    def draw(self):
+    def draw(self, debug=False):
         """Draw graphics
         """
-        self.draw_board()
+        self.draw_board(debug=debug)
 
-    def run(self):
+    def run(self, debug=False):
         """Run main pygame loop
         """
         while self.running:
             self.handle_events()
-            self.draw()
+            self.draw(debug=debug)
             pygame.display.flip()
             self.clock.tick(60)
 
