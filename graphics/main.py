@@ -11,16 +11,14 @@ import pygame
 import pygame.gfxdraw
 from pygame import Surface
 
-from game.board import Board
+from game.board import Board, Pos, WHITE, BLACK
 
 class HexBoard:
     """Print 2D board
     """
-    WHITE = 0
-    BLACK = 1
     MAP_COLOR = {
-        0 : (255,255,255),
-        1 : (0,0,0),
+        1 : (255,255,255),
+        -1 : (0,0,0),
     }
 
     def __init__(self, n=11) -> None:
@@ -38,7 +36,7 @@ class HexBoard:
 
         self.can_play = True
         self.hover_index = None
-        self.turn = self.WHITE
+        self.turn = WHITE
         self.update_window()
 
     def handle_events(self):
@@ -53,10 +51,13 @@ class HexBoard:
                 self.update_window()
                 print("Resize:", event.x, event.y)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if self.can_play and self.hover_index and self.hover_index not in self.pawn_dict:
-                    self.pawn_dict[self.hover_index] = self.turn
-                    self.board.play(self.hover_index, 'white' if self.turn == 0 else 'black')
-                    self.turn = 1-self.turn
+                
+                if self.can_play and self.hover_index:
+                    pos = Pos(self.hover_index, self.n)
+                    if self.board.can_play(pos):
+                        self.pawn_dict[pos] = self.board.turn
+                        self.board.play(pos)
+
 
     def update_window(self,
                        safey : float = 0.12,
@@ -233,7 +234,7 @@ class HexBoard:
             text_rect = digits[i].get_rect(right=pos[0], centery=pos[1])
             self.screen.blit(digits[i], text_rect)
 
-    def _draw_hex(self, debug = False):
+    def _draw_hex(self):
         """Draw hexagones
         """
 
@@ -265,8 +266,8 @@ class HexBoard:
         font = pygame.font.SysFont("Liberation Serif", int(self.diamond_height/(2*self.n)))
         for i in range(self.n):
             for j in range(self.n):
-                color = (0, 0, 0) if self.board[i,j] >= 0 else (255, 255, 255)
-                num = font.render(str(self.board[i,j]), True, color)
+                color = (0, 0, 0) if self.board[Pos(i,j)] >= 0 else (255, 255, 255)
+                num = font.render(str(self.board[Pos(i,j)]), True, color)
                 text_rect = num.get_rect(center=self.hex_pos[i][j])
                 self.screen.blit(num, text_rect)
 
@@ -279,7 +280,7 @@ class HexBoard:
                 
                 time_s = pygame.time.get_ticks()/100
                 alpha = (1 + sin(time_s))/2
-                color = (30, 30, 30, int(32*alpha)+64) if self.turn == self.BLACK else (255, 255, 255, int(64*alpha)+96)
+                color = (30, 30, 30, int(32*alpha)+64) if self.board.turn == BLACK else (255, 255, 255, int(64*alpha)+96)
 
                 i, j = self.hover_index
                 diam = self.hex_radius*2
@@ -290,9 +291,9 @@ class HexBoard:
                 self.screen.blit(circle_surf, pos)
 
         # Draw pawns
-        for (i,j), turn in self.pawn_dict.items():
+        for pos, turn in self.pawn_dict.items():
             color = self.MAP_COLOR[turn]
-            pygame.draw.circle(self.screen, color, self.hex_pos[i][j], self.hex_radius/1.5)
+            pygame.draw.circle(self.screen, color, self.hex_pos[pos.x][pos.y], self.hex_radius/1.5)
 
 
     def draw_board(self, debug=False):
