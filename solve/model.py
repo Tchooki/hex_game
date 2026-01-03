@@ -1,4 +1,7 @@
-import numpy as numpy
+from typing import Tuple
+
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -37,7 +40,7 @@ class HexNet(nn.Module):
         self.value_fc2 = nn.Linear(128, 1)
 
 
-    def forward(self, x):
+    def forward(self, x) ->  Tuple[torch.Tensor, torch.Tensor]:
         # x (batch, 1, 11, 11)
         x = self.input_block(x)
 
