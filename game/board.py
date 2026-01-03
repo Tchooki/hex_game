@@ -1,6 +1,10 @@
 """Board of hex in n x n grid"""
 
+from numpy.random import choice
+
 from typing import Tuple, Literal, Union, List, Generator
+import torch
+import numpy as np
 
 WHITE = 1
 BLACK = -1
@@ -73,10 +77,28 @@ class Board():
     def __init__(self, n : int, turn = WHITE) -> None:
         self.n = n
         self.action_space = n**2
-        self._max_label = 1
         self._board = [0 for _ in range(self.n**2)]
         self.turn = turn
         self.has_won = 0
+
+    def __repr__(self) -> str:
+        chain = ""
+        for i in range(self.n):
+            chain += "|"
+            for j in range(self.n):
+                pos = Pos((i,j), self.n)
+                car = self[pos]
+                if car == WHITE:
+                    chain += "O"
+                elif car == BLACK:
+                    chain += "X"
+                else:
+                    chain += " "
+                chain += "|"
+            chain += "\n" + " "*(i+1)
+        return chain
+
+            
 
     def __getitem__(self, pos : Pos):
         return self._board[pos.get()]
@@ -91,11 +113,12 @@ class Board():
     def _touch_end(self, pos : Pos, player : int) -> bool:
         return player == BLACK and pos.x == self.n-1 or player == WHITE and pos.y == self.n-1
 
-    def play_copy(self, action_pos : Pos, player : Literal["white", "black"]):
-        new_board = Board(self.n)
-        new_board._board = self._board.copy()
-        new_board[action_pos] = 1 if player == "white" else -1
-        return new_board
+    def reset(self):
+        self.has_won = 0
+        self.turn = WHITE
+        self._board = [0 for _ in range(self.n**2)]
+
+
 
     def can_play(self, pos : Pos) -> bool:
         """If we can play at coord
@@ -125,7 +148,24 @@ class Board():
                 rslt.append(pos.get())
         return rslt
 
-    def play(self, pos : Pos) -> int:
+    def to_tensor(self, transform=None) -> torch.Tensor:
+        b = np.array(self._board).reshape(self.n,-1) * self.turn
+        if transform:
+            b = transform(b)
+        b = torch.from_numpy(b.copy()).unsqueeze(0).unsqueeze(0).float()
+        if torch.cuda.is_available():
+            b = b.cuda()
+        return b
+
+    def play_random(self) -> Tuple[Pos, int]:
+        actions = self.actions()
+        if not actions:
+            raise ValueError("Board is full")
+        pos = Pos(choice(actions).item(), self.n)
+        return pos, self.play(pos)
+
+
+    def play(self, pos : Pos, verbose = False) -> int:
         """Play a move a tell if it's a win or not.
 
         Args:
@@ -135,7 +175,8 @@ class Board():
         Returns:
             int: 0 if nobody win else, -1 Black or 1 White
         """
-        assert self.can_play(pos), f"Can't play at pos {pos}, {"white" if self[pos] == 1 else "black"} have a pawn here."
+        assert self.can_play(pos), f"Can't play at pos {pos}, {"white" if self[pos] == 1 else "black"} have a pawn here. {self._board}"
+
         self[pos] = self.turn
 
         visited = set()
@@ -158,7 +199,8 @@ class Board():
                     stack.append(neighbour)
 
         if touch_start_border and touch_end_border:
-            print(f"Gagné : {self.turn}")
+            if verbose:
+                print(f"Gagné : {self.turn}")
             self.has_won = self.turn
             return self.turn
         # Change turn
