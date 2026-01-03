@@ -1,10 +1,10 @@
 """
 Hex Game Graphics
 """
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 from math import tan, cos, sin, sqrt, pi
 from collections import OrderedDict
-
+import queue
 import numpy as np
 # pylint: disable=no-member
 import pygame
@@ -24,6 +24,7 @@ class HexBoard:
     def __init__(self, n=11) -> None:
         pygame.init()
         self.n = n
+        self.mode = "basic"
         self.screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
         pygame.display.set_caption("Jeu de Hex")
         self.clock = pygame.time.Clock()
@@ -34,9 +35,11 @@ class HexBoard:
 
         self.hex_pos : List[List[Tuple[float, float]]] = [[(0,0)] * self.n for _ in range(self.n)]
 
+        self.move_queue = None
         self.can_play = True
         self.hover_index = None
         self.turn = WHITE
+        self.quit = False
         self.update_window()
 
     def handle_events(self):
@@ -45,7 +48,7 @@ class HexBoard:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.MOUSEMOTION:
+            elif event.type == pygame.MOUSEMOTION and self.can_play:
                 self.hover_index = self.closest_hex()
             elif event.type == pygame.WINDOWRESIZED:
                 self.update_window()
@@ -57,6 +60,29 @@ class HexBoard:
                     if self.board.can_play(pos):
                         self.pawn_dict[pos] = self.board.turn
                         self.board.play(pos)
+
+    def cumputer_move(self):
+        """Move from computer of AI"""
+        if self.mode == "random" and self.board.has_won == 0:
+            turn = self.board.turn
+            pos, _ = self.board.play_random()
+            self.pawn_dict[pos] = turn
+        elif self.mode == "training":
+            if self.board.has_won == 0:
+                while isinstance(self.move_queue, queue.Queue) and not self.move_queue.empty():
+                    pos = self.move_queue.get_nowait()
+                    if isinstance(pos, Pos):
+                        self.pawn_dict[pos] = self.board.turn
+                        self.board.play(pos)
+                    elif pos == "reset":
+                        self.reset()
+
+    def reset(self):
+        """Reset board"""
+        self.turn = WHITE
+        self.board.reset()
+        self.pawn_dict = OrderedDict()
+
 
 
     def update_window(self,
@@ -311,14 +337,26 @@ class HexBoard:
         """
         self.draw_board(debug=debug)
 
-    def run(self, debug=False):
+    def run(self, debug=False, mode : Literal["random","basic","training"] = "basic", move_queue : Optional[queue.Queue] = None):
         """Run main pygame loop
         """
+
+        # Handle mode 
+        self.mode = mode
+        if mode == "training":
+            self.can_play = False
+            self.move_queue = move_queue
+
+        # Main Loop
         while self.running:
+            self.cumputer_move()
             self.handle_events()
             self.draw(debug=debug)
             pygame.display.flip()
             self.clock.tick(60)
+
+        # Quit
+        pygame.display.quit()
 
 
 if __name__ == '__main__':

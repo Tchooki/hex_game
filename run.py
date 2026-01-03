@@ -1,5 +1,5 @@
 """Run game"""
-from graphics.main import HexBoard
+from graphics.display import HexBoard
 
 if __name__ == '__main__':
-    HexBoard().run(debug=False)
+    HexBoard(4).run(debug=False)
