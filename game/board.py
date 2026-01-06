@@ -148,6 +148,12 @@ class Board():
                 rslt.append(pos.get())
         return rslt
 
+    def to_numpy(self, transform = None) -> np.ndarray:
+        b = np.array(self._board).reshape(self.n,-1) * self.turn
+        if transform:
+            b = transform(b)
+        return b
+
     def to_tensor(self, transform=None) -> torch.Tensor:
         b = np.array(self._board).reshape(self.n,-1) * self.turn
         if transform:

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 class RootNode():
     def __init__(self, state : Board) -> None:
+        self.action = None
         self.parent = None
         self.is_expanded = False
         self.state = deepcopy(state)
@@ -172,7 +173,7 @@ def get_random_transformation():
 
     return transform
 
-def perform_model(model : "HexNet", leaf : RootNode) -> Tuple[np.ndarray, float]:
+def perform_model(model : "HexNet", batch_leaves : List[RootNode]) -> Tuple[List[np.ndarray], np.ndarray]:
     """Forward model and add reflexions
 
     Args:
@@ -182,17 +183,27 @@ def perform_model(model : "HexNet", leaf : RootNode) -> Tuple[np.ndarray, float]
     Returns:
         Tuple[np.ndarray, float]: Proba and value
     """
-    transform = get_random_transformation()
+    transforms = [get_random_transformation() for _ in range(len(batch_leaves))]
+    states = []
     with torch.no_grad():
-        proba, value = model.forward(leaf.state.to_tensor(transform=transform))
-        proba = torch.nn.functional.softmax(proba, dim=1)
-        proba = proba[0].cpu().numpy().reshape(leaf.state.n,-1)
-        proba = transform(proba).reshape(-1)
-        value = value[0].cpu().numpy().item()
-        return proba, value
+        # Create batch
+        for i, leaf in enumerate(batch_leaves):
+            state = leaf.state.to_numpy(transforms[i])
+            state = torch.from_numpy(state.copy()).unsqueeze(0).float()  # add extra dim for channel
+            if torch.cuda.is_available():
+                state = state.cuda()
+            states.append(state)
+        inputs = torch.stack(states)
+        #Eval
+        probas, values = model.forward(inputs)
+
+        probas = torch.nn.functional.softmax(probas, dim=1)
+        probas = [transforms[i](probas[i].cpu().numpy().reshape(model.n,-1)).reshape(-1) for i in range(len(batch_leaves))]
+        values = values.cpu().squeeze(dim=1).numpy()
+        return probas, values
 
 
-def MCTS(root : RootNode, model : "HexNet", n_iter : int = 100):
+def MCTS(root : RootNode, model : "HexNet", batch_size = 16, timeout : float = 0.010, n_iter : int = 100):
     """Perform Monte-Carlo Tree Search
 
     Args:
@@ -203,16 +214,36 @@ def MCTS(root : RootNode, model : "HexNet", n_iter : int = 100):
     Returns:
         RootNode: the tree created
     """
-    for i in range(n_iter):
+    # First Root eval
+    probas, values = perform_model(model, [root])
+    root.expand(probas[0])
+    root.backpup(values[0].item())
+
+    batch_leaves = []
+    start_time = time.perf_counter()
+    for _ in range(n_iter):
         # Find  best child Q + U
         leaf = root.select()
-        # predict with model
-        proba, value = perform_model(model, leaf)
-        # print(proba)
-        if leaf.state.has_won == 0:
-            leaf.expand(proba)
-        # Update V N
-        leaf.backpup(value)
+
+
+        if len(batch_leaves) < batch_size and time.perf_counter() - start_time < timeout:
+            batch_leaves.append(leaf)
+            leaf.sum_V -= 10 # Virtual loss
+        else:
+            # predict with model
+            # if len(batch_leaves) < batch_size:
+            #     print("Timout", len(batch_leaves))
+            probas, values = perform_model(model, batch_leaves)
+            # Expand & backup
+            for i, (proba, value) in enumerate(zip(probas, values)):
+                leaf.sum_V += 10 # Restore loss
+                if leaf.state.has_won == 0:
+                    leaf.expand(proba)
+                # Update V N
+                leaf.backpup(value)
+            start_time = time.perf_counter()
+            batch_leaves = []
+
     return root
 
 def generate_data(model, n_games, n_random_plays = 1, n_iter = 10, show = False):
@@ -232,26 +263,27 @@ def generate_data(model, n_games, n_random_plays = 1, n_iter = 10, show = False)
     boards = []
     policies = []
     values = []
-    move_queue = queue.Queue()
+    move_queue = None
 
     if show:
-        threading.Thread(target = lambda : HexBoard(11).run(mode='training', move_queue=move_queue)).start()
+        move_queue = queue.Queue()
+        threading.Thread(target = lambda : HexBoard(11).run(mode='training', move_queue=move_queue), daemon=True).start()
 
-    for iter_game in range(n_games):
+    for _ in range(n_games):
         b.reset()
         if show:
-            move_queue.put("reset")
+            move_queue.put_nowait("reset")
         for _ in range(n_random_plays):
             pos, _ = b.play_random()
             if show:
-                move_queue.put(pos)
+                move_queue.put_nowait(pos)
         root = RootNode(b)
         current = root
         while current.state.has_won == 0:
             MCTS(current, model, n_iter=n_iter)
             current : Node = current.best_child()
             if show:
-                move_queue.put(Pos(current.action, current.state.n))
+                move_queue.put_nowait(Pos(current.action, current.state.n))
         won = current.state.has_won
 
         while current is not None:

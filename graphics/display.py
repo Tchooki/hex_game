@@ -1,6 +1,7 @@
 """
 Hex Game Graphics
 """
+
 from typing import List, Tuple, Optional, Literal
 from math import tan, cos, sin, sqrt, pi
 from collections import OrderedDict
@@ -12,6 +13,7 @@ import pygame.gfxdraw
 from pygame import Surface
 
 from game.board import Board, Pos, WHITE, BLACK
+
 
 class HexBoard:
     """Print 2D board
@@ -52,7 +54,7 @@ class HexBoard:
                 self.hover_index = self.closest_hex()
             elif event.type == pygame.WINDOWRESIZED:
                 self.update_window()
-                print("Resize:", event.x, event.y)
+                # print("Resize:", event.x, event.y)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 
                 if self.can_play and self.hover_index:
@@ -68,14 +70,14 @@ class HexBoard:
             pos, _ = self.board.play_random()
             self.pawn_dict[pos] = turn
         elif self.mode == "training":
-            if self.board.has_won == 0:
-                while isinstance(self.move_queue, queue.Queue) and not self.move_queue.empty():
-                    pos = self.move_queue.get_nowait()
-                    if isinstance(pos, Pos):
-                        self.pawn_dict[pos] = self.board.turn
-                        self.board.play(pos)
-                    elif pos == "reset":
-                        self.reset()
+            while isinstance(self.move_queue, queue.Queue) and not self.move_queue.empty():
+                pos = self.move_queue.get_nowait()
+                self.move_queue.task_done()
+                if isinstance(pos, Pos):
+                    self.pawn_dict[pos] = self.board.turn
+                    self.board.play(pos)
+                elif pos == "reset":
+                    self.reset()
 
     def reset(self):
         """Reset board"""

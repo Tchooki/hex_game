@@ -23,8 +23,9 @@ class ResBlock(nn.Module):
         return out
 
 class HexNet(nn.Module):
-    def __init__(self, n_res_block = 20) -> None:
+    def __init__(self, n = 11, n_res_block = 20) -> None:
         super().__init__()
+        self.n = n
 
         self.input_block = ResBlock(1)
         self.blocks = nn.ModuleList([ResBlock(128) for _ in range(n_res_block-1)])
@@ -32,16 +33,16 @@ class HexNet(nn.Module):
         # Policy
         self.policy_conv = nn.Conv2d(128, 2, kernel_size=1)
         self.policy_bn = nn.BatchNorm2d(2)
-        self.policy_fc = nn.Linear(2 * 11 * 11, 11 * 11)
+        self.policy_fc = nn.Linear(2 * self.n * self.n, self.n * self.n)
         # Value
         self.value_conv = nn.Conv2d(128, 1, kernel_size=1)
         self.value_bn = nn.BatchNorm2d(1)
-        self.value_fc1 = nn.Linear(1 * 11 * 11, 128)
+        self.value_fc1 = nn.Linear(1 * self.n * self.n, 128)
         self.value_fc2 = nn.Linear(128, 1)
 
 
     def forward(self, x) ->  Tuple[torch.Tensor, torch.Tensor]:
-        # x (batch, 1, 11, 11)
+        # x (batch, 1, self.n, self.n)
         x = self.input_block(x)
 
         for block in self.blocks:
