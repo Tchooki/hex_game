@@ -1,36 +1,47 @@
 import threading
-import queue
 import time
 
 from typing import List, Tuple, Optional, Union, TYPE_CHECKING
 import networkx as nx
-from IPython.display import clear_output
 from copy import deepcopy
 
 
 import torch
 import numpy as np
 
-from graphics.display import HexBoard
 from game.board import Board, Pos, WHITE, BLACK
 
 if TYPE_CHECKING:
     from solve.model import HexNet
     import torch.nn as nn
 
+
+# pylint: disable=invalid-name
 class RootNode():
+    """RootNode
+    """
     def __init__(self, state : Board) -> None:
         self.action = None
         self.parent = None
         self.is_expanded = False
         self.state = deepcopy(state)
         self.possible_actions = self.state.actions()
+        self.children : dict[int, Node] = dict()
+
         self.children_P = np.zeros(self.state.action_space, dtype=float)
         self.children_sum_V = np.zeros(self.state.action_space, dtype=float)
         self.children_N = np.zeros(self.state.action_space, dtype=int)
-        self.children : dict[int, Node] = dict()
+        self.sum_children_N = 0
+
+        self.allow_update = True
+        self._children_Q = np.zeros(self.state.action_space, dtype=float) - 100
+        self._children_U = None
+        self.need_update_U = False
+        self.update_children_U()
+
         self.N_root = 0
         self.sum_V_root = 0
+
 
     def build_graph(self):
         G = nx.DiGraph()
@@ -62,26 +73,30 @@ class RootNode():
     def sum_V(self, value):
         self.sum_V_root = value
 
-
     @property
     def Q(self):
         """Action value"""
-        if self.N == 0:
-            return 0
-        return self.sum_V/self.N
+        return self.sum_V/self.N  if self.N != 0 else 0
+
+    def update_children_Q(self, action):
+        """Update children Q"""
+        if self.allow_update and self.children_N[action] > 0:
+            self._children_Q[action] = self.children_sum_V[action] / self.children_N[action]
 
     @property
     def children_Q(self):
         """Action values"""
-        Q = np.zeros_like(self.children_sum_V, dtype=float)-100
-        mask = self.children_N > 0
-        Q[mask] = self.children_sum_V[mask] / self.children_N[mask]
-        return Q
+        return self._children_Q
+
+    def update_children_U(self, c = 1):
+        """Update children U"""
+        if self.allow_update:
+            self._children_U = c * self.children_P * np.sqrt(self.sum_children_N+1) / (1 + self.children_N)
 
     @property
-    def children_U(self, c = 1):
+    def children_U(self):
         """Explore factor"""
-        return c * self.children_P * np.sqrt(self.children_N.sum()+1) / (1 + self.children_N)
+        return self._children_U
 
     def get_policy(self):
         policy = np.zeros(self.state.action_space, dtype=float)
@@ -97,9 +112,9 @@ class RootNode():
         for i in range(len(proba_model)): # Mask ilegal move
             if i not in actions:
                 proba_model[i] = 0.0
-                self.children_Q[i] = -float("inf")
 
-        self.children_P = np.array(proba_model)
+        self.children_P = np.asarray(proba_model)
+        self.update_children_U()
 
     def select(self):
         """Select leaf node according to Q + U"""
@@ -111,18 +126,27 @@ class RootNode():
     def backpup(self, value : float):
         """Update V N recursively"""
         current = self
-        while current:
+        while isinstance(current, Node):
+            current.allow_update = False
             current.N += 1
             current.sum_V += value
+            current.parent.update_children_Q(current.action)
+            current.parent.need_update_U = True
+            current.allow_update = True
             current = current.parent
+        current.N += 1
+        current.sum_V += value
 
     def best_child(self) -> "Node":
         """Return best child according to Q + U"""
+        if self.need_update_U:
+            self.update_children_U()
+            self.need_update_U = False
         i_max = np.argmax((self.children_Q + self.children_U)).item()
         if i_max in self.children:
             return self.children[i_max]
         else:
-            new_state = deepcopy(self.state)
+            new_state = self.state.light_copy()
             try :
                 new_state.play(Pos(i_max, self.state.n))
             except AssertionError:
@@ -148,7 +172,11 @@ class Node(RootNode):
     @N.setter
     def N(self, value):
         """Number of visit setter"""
+        self.parent.sum_children_N += value - self.parent.children_N[self.action]
         self.parent.children_N[self.action] = value
+        if self.allow_update:
+            self.parent.update_children_Q(self.action)
+            self.parent.update_children_U()
 
     @property
     def sum_V(self):
@@ -159,6 +187,8 @@ class Node(RootNode):
     def sum_V(self, value):
         """Sum of values setter"""
         self.parent.children_sum_V[self.action] = value
+        if self.allow_update:
+            self.parent.update_children_Q(self.action)
 
 def get_random_transformation():
     """Get random transformation (reflexion along diagonals)"""
@@ -184,23 +214,28 @@ def perform_model(model : "HexNet", batch_leaves : List[RootNode]) -> Tuple[List
         Tuple[np.ndarray, float]: Proba and value
     """
     transforms = [get_random_transformation() for _ in range(len(batch_leaves))]
-    states = []
+    # Create batch
+    states = np.stack([
+        leaf.state.to_numpy(transforms[i])
+        for i, leaf in enumerate(batch_leaves)
+    ])
+    inputs = torch.from_numpy(states).unsqueeze(1).float()
+    if torch.cuda.is_available():
+        inputs = inputs.cuda()
+    #Eval
     with torch.no_grad():
-        # Create batch
-        for i, leaf in enumerate(batch_leaves):
-            state = leaf.state.to_numpy(transforms[i])
-            state = torch.from_numpy(state.copy()).unsqueeze(0).float()  # add extra dim for channel
-            if torch.cuda.is_available():
-                state = state.cuda()
-            states.append(state)
-        inputs = torch.stack(states)
-        #Eval
         probas, values = model.forward(inputs)
-
         probas = torch.nn.functional.softmax(probas, dim=1)
-        probas = [transforms[i](probas[i].cpu().numpy().reshape(model.n,-1)).reshape(-1) for i in range(len(batch_leaves))]
-        values = values.cpu().squeeze(dim=1).numpy()
-        return probas, values
+    # CPU
+    probas = probas.cpu().numpy()
+    values = values.cpu().squeeze(1).numpy()
+
+    # undo transforms
+    probas = [
+        transforms[i](probas[i].reshape(model.n,-1)).reshape(-1)
+        for i in range(len(batch_leaves))
+    ]
+    return probas, values
 
 
 def MCTS(root : RootNode, model : "HexNet", batch_size = 16, timeout : float = 0.010, n_iter : int = 100):
@@ -226,10 +261,11 @@ def MCTS(root : RootNode, model : "HexNet", batch_size = 16, timeout : float = 0
         leaf = root.select()
 
 
-        if len(batch_leaves) < batch_size and time.perf_counter() - start_time < timeout:
+        if len(batch_leaves) < batch_size and (time.perf_counter() - start_time < timeout or not batch_leaves):
             batch_leaves.append(leaf)
             leaf.sum_V -= 10 # Virtual loss
         else:
+            # print(f"Batch {len(batch_leaves)}")
             # predict with model
             # if len(batch_leaves) < batch_size:
             #     print("Timout", len(batch_leaves))
@@ -266,6 +302,8 @@ def generate_data(model, n_games, n_random_plays = 1, n_iter = 10, show = False)
     move_queue = None
 
     if show:
+        import queue
+        from graphics.display import HexBoard
         move_queue = queue.Queue()
         threading.Thread(target = lambda : HexBoard(11).run(mode='training', move_queue=move_queue), daemon=True).start()
 

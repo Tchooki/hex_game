@@ -118,6 +118,11 @@ class Board():
         self.turn = WHITE
         self._board = [0 for _ in range(self.n**2)]
 
+    def light_copy(self):
+        new_board = Board(self.n, self.turn)
+        new_board._board = self._board.copy()
+        return new_board
+
 
 
     def can_play(self, pos : Pos) -> bool:
