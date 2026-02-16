@@ -1,0 +1,19 @@
+[project]
+name = "hex-game"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "networkx>=3.6.1",
+    "numpy>=2.4.2",
+    "pygame>=2.6.1",
+    "torch>=2.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "types-networkx>=3.6.1.20260210",
+]

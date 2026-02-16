@@ -2,3 +2,6 @@ test.ipynb
 __pycache__/
 
 .vscode/
+
+*.stats
+game/board_old.py
