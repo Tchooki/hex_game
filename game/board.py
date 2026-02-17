@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from numpy.random import choice
 
-WHITE = 1
-BLACK = -1
+WHITE: int = 1
+BLACK: int = -1
 
 
 class UnionFind:
@@ -111,7 +111,7 @@ class Pos:
 class Board:
     """Representing Board of hex in n x n grid"""
 
-    def __init__(self, n: int, turn=WHITE) -> None:
+    def __init__(self, n: int, turn: int = WHITE) -> None:
         self.n = n
         self.action_space = n**2
         self._board = [0 for _ in range(self.n**2)]

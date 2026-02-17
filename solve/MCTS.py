@@ -33,7 +33,7 @@ class RootNode:
         self.sum_children_N = 0
 
         self.allow_update = True
-        self._children_Q = np.zeros(self.state.action_space, dtype=float) - 100
+        self._children_Q = np.zeros(self.state.action_space, dtype=float)
         self._children_U = None
         self.need_update_U = False
         self.update_children_U()
@@ -107,20 +107,55 @@ class RootNode:
         """Explore factor"""
         return self._children_U
 
-    def get_policy(self):
-        policy = np.zeros(self.state.action_space, dtype=float)
-        mask = self.children_N > 0
-        policy[mask] = self.children_N[mask] / self.N
+    def get_policy(self, temperature=1.0):
+        """Get policy from visit counts with temperature
+
+        Args:
+            temperature (float): Temperature parameter.
+                - temperature = 1: policy proportional to visit counts
+                - temperature → 0: policy becomes argmax (best move only)
+                - temperature > 1: more exploration
+
+        Returns:
+            np.ndarray: Policy distribution over actions
+        """
+        if self.N == 0:
+            return np.zeros(self.state.action_space, dtype=float)
+
+        if temperature == 0:
+            # Deterministic: argmax
+            policy = np.zeros(self.state.action_space, dtype=float)
+            best_action = np.argmax(self.children_N)
+            policy[best_action] = 1.0
+            return policy
+
+        # Apply temperature: π(a) ∝ N(a)^(1/τ)
+        visits_temp = np.power(self.children_N, 1.0 / temperature)
+        policy = visits_temp / np.sum(visits_temp)
         return policy
+
+    def sample_action(self, temperature=1.0):
+        """Sample an action according to the policy with temperature
+
+        Args:
+            temperature (float): Temperature parameter
+
+        Returns:
+            int: Sampled action index
+        """
+        policy = self.get_policy(temperature=temperature)
+        action = np.random.choice(self.state.action_space, p=policy)
+        return action
 
     def expand(self, proba_model: np.ndarray):
         """Expand node"""
         self.is_expanded = True
         actions = self.state.actions()
 
-        for i in range(len(proba_model)):  # Mask ilegal move
+        for i in range(len(proba_model)):  # Mask illegal move
             if i not in actions:
-                proba_model[i] = 0.0
+                proba_model[i] = 0.0  # P = 0 (ensures U = 0)
+                self._children_Q[i] = -np.inf  # Q = -inf (double safety)
 
         self.children_P = np.asarray(proba_model)
         self.update_children_U()
@@ -139,6 +174,7 @@ class RootNode:
             current.allow_update = False
             current.N += 1
             current.sum_V += value
+            value = -value  # Negate value as we go up (players alternate)
             current.parent.update_children_Q(current.action)
             current.parent.need_update_U = True
             current.allow_update = True
@@ -151,6 +187,7 @@ class RootNode:
         if self.need_update_U:
             self.update_children_U()
             self.need_update_U = False
+
         i_max = np.argmax((self.children_Q + self.children_U)).item()
         if i_max in self.children:
             return self.children[i_max]
@@ -164,6 +201,30 @@ class RootNode:
                 print("U:", self.children_U)
             child = Node(new_state, parent=self, action=i_max)
             self.children[i_max] = child
+            return child
+
+    def sample_child(self, temperature=1.0) -> "Node":
+        """Sample a child according to policy with temperature
+
+        Args:
+            temperature (float): Temperature parameter for sampling.
+                - temperature = 1: proportional to visit counts
+                - temperature → 0: best move (equivalent to best_child)
+                - temperature > 1: more exploration
+
+        Returns:
+            Node: Sampled child node
+        """
+        action = self.sample_action(temperature=temperature)
+
+        # Get or create the child for this action
+        if action in self.children:
+            return self.children[action]
+        else:
+            new_state = self.state.light_copy()
+            new_state.play(Pos(action, self.state.n))
+            child = Node(new_state, parent=self, action=action)
+            self.children[action] = child
             return child
 
 
@@ -185,7 +246,7 @@ class Node(RootNode):
         self.parent.children_N[self.action] = value
         if self.allow_update:
             self.parent.update_children_Q(self.action)
-            self.parent.update_children_U()
+            self.parent.need_update_U = True
 
     @property
     def sum_V(self):
@@ -256,7 +317,7 @@ def MCTS(
     batch_size=16,
     timeout: float = 0.010,
     n_iter: int = 100,
-):
+) -> RootNode:
     """Perform Monte-Carlo Tree Search
 
     Args:
@@ -272,7 +333,7 @@ def MCTS(
     root.expand(probas[0])
     root.backup(values[0].item())
 
-    batch_leaves = []
+    batch_leaves: List[Node] = []
     start_time = time.perf_counter()
     for _ in range(n_iter):
         # Find  best child Q + U
@@ -291,18 +352,27 @@ def MCTS(
             probas, values = perform_model(model, batch_leaves)
             # Expand & backup
             for i, (proba, value) in enumerate(zip(probas, values)):
-                leaf.sum_V += 10  # Restore loss
-                if leaf.state.has_won == 0:
-                    leaf.expand(proba)
+                batch_leaves[i].sum_V += 10  # Restore virtual loss
+                if batch_leaves[i].state.has_won == 0:
+                    batch_leaves[i].expand(proba)
                 # Update V N
-                leaf.backup(value)
+                batch_leaves[i].backup(value)
             start_time = time.perf_counter()
             batch_leaves = []
 
     return root
 
 
-def generate_data(model, n_games, n_random_plays=1, n_iter=10, show=False):
+def generate_data(
+    model,
+    n_games,
+    n_random_plays=1,
+    n_iter=10,
+    show=False,
+    save_path=None,
+    temperature=1.0,
+    temperature_threshold=15,
+):
     """Generate data for training according to model
 
     Args:
@@ -311,10 +381,15 @@ def generate_data(model, n_games, n_random_plays=1, n_iter=10, show=False):
         n_random_plays (int, optional): first plays that are chosen randomly. Defaults to 1.
         n_iter (int, optional): number of iteration in MCTS. Defaults to 10.
         show (bool, optional): Show with pygame the generation of data. Defaults to False.
+        save_path (str, optional): Path to save data in compressed format. If None, data is not saved. Defaults to None.
+        temperature (float, optional): Temperature for move selection. Defaults to 1.0.
+        temperature_threshold (int, optional): Number of moves after which temperature → 0. Defaults to 15.
 
     Returns:
-        _type_: data
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training
     """
+    import os
+
     b = Board(11)
     boards = []
     policies = []
@@ -332,7 +407,7 @@ def generate_data(model, n_games, n_random_plays=1, n_iter=10, show=False):
             daemon=True,
         ).start()
 
-    for _ in range(n_games):
+    for game_idx in range(n_games):
         b.reset()
         if show:
             move_queue.put_nowait("reset")
@@ -342,17 +417,70 @@ def generate_data(model, n_games, n_random_plays=1, n_iter=10, show=False):
                 move_queue.put_nowait(pos)
         root = RootNode(b)
         current = root
+        game_history = []  # Store (node, state) for this game
+        move_count = 0
+
         while current.state.has_won == 0:
             MCTS(current, model, n_iter=n_iter)
-            current: Node = current.best_child()
+            game_history.append(current)
+
+            # Use temperature-based selection early, then switch to best move
+            tau = temperature if move_count < temperature_threshold else 0
+            current = current.sample_child(temperature=tau)
+
+            move_count += 1
             if show:
                 move_queue.put_nowait(Pos(current.action, current.state.n))
+
+        # Game finished, get the winner
         won = current.state.has_won
 
-        while current is not None:
-            boards.append(current.state.to_tensor())
-            policies.append(current.children_P)
-            values.append(current.Q)
-            current = current.parent
+        # Add the final position
+        game_history.append(current)
 
-    return won
+        # Collect training data from this game
+        # For each position, we store:
+        # - board state (from player perspective)
+        # - improved policy from MCTS (visit counts)
+        # - value target (game outcome from player perspective)
+        for node in game_history:
+            boards.append(node.state.to_numpy())
+
+            # Use improved policy from MCTS (based on visit counts)
+            # Not the network prior (children_P)
+            policies.append(node.get_policy())
+
+            # Value target is the game outcome from current player's perspective
+            # won is from absolute perspective, need to adjust for current player
+            value_target = won * node.state.turn
+            values.append(value_target)
+
+    # Convert lists to numpy arrays
+    boards_array = np.array(boards, dtype=np.float32)
+    policies_array = np.array(policies, dtype=np.float32)
+    values_array = np.array(values, dtype=np.float32)
+
+    # Save to disk if path is provided
+    if save_path is not None:
+        # Create data directory if it doesn't exist
+        os.makedirs(save_path, exist_ok=True)
+
+        # Generate filename with timestamp
+        import time
+
+        timestamp = int(time.time())
+        filename = os.path.join(save_path, f"selfplay_data_{timestamp}.npz")
+
+        # Save in compressed format
+        np.savez_compressed(
+            filename,
+            boards=boards_array,
+            policies=policies_array,
+            values=values_array,
+            n_games=n_games,
+            n_iter=n_iter,
+        )
+        print(f"Data saved to {filename}")
+        print(f"Total positions: {len(boards_array)}")
+
+    return boards_array, policies_array, values_array
