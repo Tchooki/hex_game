@@ -1,6 +1,6 @@
-"""Board of hex in n x n grid"""
+"""Board of hex in n x n grid slice"""
 
-from typing import List, Tuple, Union
+from __future__ import annotations
 
 import numpy as np
 import torch
@@ -40,9 +40,9 @@ class UnionFind:
 
 
 class Pos:
-    __slots__ = ("x", "y", "pos", "n")
+    __slots__ = ("n", "pos", "x", "y")
 
-    def __init__(self, pos: Union[Tuple[int, int], int], n: int) -> None:
+    def __init__(self, pos: tuple[int, int] | int, n: int) -> None:
         self.n = n
         if isinstance(pos, int):
             self.pos = pos
@@ -63,10 +63,12 @@ class Pos:
         raise TypeError
 
     def get(self):
-        """Getter
+        """
+        Getter
 
         Returns:
             int: encoded pos
+
         """
         return self.pos
 
@@ -76,22 +78,24 @@ class Pos:
     def __str__(self) -> str:
         return self.__repr__()
 
-    def encode_coord(self, key: Tuple[int, int]) -> int:
+    def encode_coord(self, key: tuple[int, int]) -> int:
         """Encode coord"""
         return key[0] * self.n + key[1]
 
-    def decode_coord(self, key: int) -> Tuple[int, int]:
+    def decode_coord(self, key: int) -> tuple[int, int]:
         """Decode coord"""
         return key // self.n, key % self.n
 
-    def get_neighbours(self) -> List["Pos"]:
-        """Get valid neighbours next to key
+    def get_neighbours(self) -> list[Pos]:
+        """
+        Get valid neighbours next to key
 
         Args:
-            key (Tuple[int, int]): coord
+            key (tuple[int, int]): coord
 
         Yields:
-            Tuple[int, int]: neighbor coord
+            tuple[int, int]: neighbor coord
+
         """
         rslt = []
         for i in range(-1, 2):
@@ -169,21 +173,25 @@ class Board:
         return new_board
 
     def can_play(self, pos: Pos) -> bool:
-        """If we can play at coord
+        """
+        If we can play at coord
 
         Args:
             pos (Pos): coord
 
         Returns:
             bool: if we can play
+
         """
         return self[pos] == 0
 
-    def actions(self) -> List[int]:
-        """Create generator that yield all possible actions (i.e. empty spaces)
+    def actions(self) -> list[int]:
+        """
+        Create generator that yield all possible actions (i.e. empty spaces)
 
         Yields:
             int: coord
+
         """
         rslt = []
         for i, val in enumerate(self._board):
@@ -201,12 +209,12 @@ class Board:
         b = np.array(self._board).reshape(self.n, -1) * self.turn
         if transform:
             b = transform(b)
-        b = torch.from_numpy(b.copy()).unsqueeze(0).unsqueeze(0).float()
+        t = torch.from_numpy(b.copy()).unsqueeze(0).unsqueeze(0).float()
         if torch.cuda.is_available():
-            b = b.cuda()
-        return b
+            t = t.cuda()
+        return t
 
-    def play_random(self) -> Tuple[Pos, int]:
+    def play_random(self) -> tuple[Pos, int]:
         actions = self.actions()
         if not actions:
             raise ValueError("Board is full")
@@ -214,7 +222,8 @@ class Board:
         return pos, self.play(pos)
 
     def play(self, pos: Pos, verbose=False) -> int:
-        """Play a move a tell if it's a win or not.
+        """
+        Play a move a tell if it's a win or not.
 
         Args:
             pos (Pos): coord
@@ -222,6 +231,7 @@ class Board:
 
         Returns:
             int: 0 if nobody win else, -1 Black or 1 White
+
         """
         assert self.can_play(pos), (
             f"Can't play at pos {pos}, {'white' if self[pos] == WHITE else 'black'} has a pawn here."
@@ -254,12 +264,11 @@ class Board:
                     print(f"Gagné : {self.turn}")
                 self.has_won = self.turn
                 return self.turn
-        else:
-            if self.uf.find(self.black_left) == self.uf.find(self.black_right):
-                if verbose:
-                    print(f"Gagné : {self.turn}")
-                self.has_won = self.turn
-                return self.turn
+        elif self.uf.find(self.black_left) == self.uf.find(self.black_right):
+            if verbose:
+                print(f"Gagné : {self.turn}")
+            self.has_won = self.turn
+            return self.turn
 
         # Change turn
         self.turn = self.turn * -1

@@ -1,8 +1,8 @@
-from typing import Tuple
+from __future__ import annotations
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class ResBlock(nn.Module):
@@ -10,7 +10,7 @@ class ResBlock(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(
-            channels, hidden_channels, kernel_size=3, padding_mode="zeros", padding=1
+            channels, hidden_channels, kernel_size=3, padding_mode="zeros", padding=1,
         )
         self.bn1 = nn.BatchNorm2d(hidden_channels)
         self.conv2 = nn.Conv2d(
@@ -49,7 +49,7 @@ class HexNet(nn.Module):
         self.value_fc1 = nn.Linear(1 * self.n * self.n, 128)
         self.value_fc2 = nn.Linear(128, 1)
 
-    def forward(self, x) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x) -> tuple[torch.Tensor, torch.Tensor]:
         # x (batch, 1, self.n, self.n)
         x = self.input_block(x)
 

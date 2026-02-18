@@ -2,7 +2,6 @@
 
 import cProfile
 
-from solve.MCTS import generate_data
 from solve.model import HexNet
 
 if __name__ == "__main__":

@@ -1,11 +1,9 @@
-"""
-Hex Game Graphics
-"""
+from __future__ import annotations
 
 import queue
 from collections import OrderedDict
 from math import cos, pi, sin, sqrt, tan
-from typing import List, Literal, Optional, Tuple
+from typing import Literal
 
 import numpy as np
 import pygame
@@ -33,13 +31,13 @@ class HexBoard:
         self.running = True
 
         self.board = Board(self.n)
-        self.pawn_dict = OrderedDict()
+        self.pawn_dict: dict[Pos, int] = OrderedDict()
 
-        self.hex_pos: List[List[Tuple[float, float]]] = [
+        self.hex_pos: list[list[tuple[float, float]]] = [
             [(0, 0)] * self.n for _ in range(self.n)
         ]
 
-        self.move_queue = None
+        self.move_queue: queue.Queue | None = None
         self.can_play = True
         self.hover_index = None
         self.turn = WHITE
@@ -88,11 +86,13 @@ class HexBoard:
         self.pawn_dict = OrderedDict()
 
     def update_window(self, safey: float = 0.12, safex: float = 0.02):
-        """Update window settings and positions
+        """
+        Update window settings and positions
 
         Args:
             safey (float, optional): Safe zone up and down. Defaults to 0.12.
             safex (float, optional): Safe zone left and right. Defaults to 0.02.
+
         """
         width, height = self.screen.get_width(), self.screen.get_height()
         safe_height = int((1 - safey) * height)
@@ -132,11 +132,13 @@ class HexBoard:
                     self.center[1] + (t_j - 1 / 2) * self.diamond_height,
                 )
 
-    def closest_hex(self) -> Optional[Tuple]:
-        """Test if mouse hover a hexagone
+    def closest_hex(self) -> tuple | None:
+        """
+        Test if mouse hover a hexagone
 
         Returns:
-            Optional[Tuple]: id coords if found one, else None
+            tuple | None: id coords if found one, else None
+
         """
         mx, my = pygame.mouse.get_pos()
         mouse_pos = np.array([mx, my])
@@ -172,7 +174,7 @@ class HexBoard:
             self.diamond_bottom_left[1] - self.radius,
         )
 
-        #### BG PARTS  #####
+        # BG PARTS  #####
         n_arc_points = 10
         # PART BG
         points = []
@@ -182,7 +184,7 @@ class HexBoard:
                 (
                     center_top_left[0] - self.radius * cos(angle),
                     center_top_left[1] - self.radius * sin(angle),
-                )
+                ),
             )
         # PART black
         # corner top left
@@ -192,7 +194,7 @@ class HexBoard:
                 (
                     center_top_left[0] - self.radius * cos(angle),
                     center_top_left[1] - self.radius * sin(angle),
-                )
+                ),
             )
         # center
         # corner bottom right
@@ -201,7 +203,7 @@ class HexBoard:
                 (
                     center_bottom_right[0] + self.radius * cos(angle),
                     center_bottom_right[1] - self.radius * sin(angle),
-                )
+                ),
             )
         # corner top right
         for angle in np.linspace(-pi / 3, -pi / 6, n_arc_points):
@@ -209,7 +211,7 @@ class HexBoard:
                 (
                     center_top_right[0] - self.radius * sin(angle),
                     center_top_right[1] - self.radius * cos(angle),
-                )
+                ),
             )
         # corner bottom left
         for angle in np.linspace(pi / 6, pi / 3, n_arc_points):
@@ -217,7 +219,7 @@ class HexBoard:
                 (
                     center_bottom_left[0] - self.radius * sin(angle),
                     center_bottom_left[1] + self.radius * cos(angle),
-                )
+                ),
             )
         pygame.gfxdraw.filled_polygon(self.screen, points, (40, 40, 40))
 
@@ -231,7 +233,7 @@ class HexBoard:
                 (
                     center_top_left[0] - self.radius * cos(angle),
                     center_top_left[1] - self.radius * sin(angle),
-                )
+                ),
             )
         # corner top left
         for angle in np.linspace(0, -pi / 6, n_arc_points):
@@ -239,7 +241,7 @@ class HexBoard:
                 (
                     center_top_right[0] - self.radius * sin(angle),
                     center_top_right[1] - self.radius * cos(angle),
-                )
+                ),
             )
         # corner bottom left
         for angle in np.linspace(pi / 6, 0, n_arc_points):
@@ -247,7 +249,7 @@ class HexBoard:
                 (
                     center_bottom_left[0] - self.radius * sin(angle),
                     center_bottom_left[1] + self.radius * cos(angle),
-                )
+                ),
             )
         # corner bottom right
         for angle in np.linspace(-pi / 2, -pi / 6, n_arc_points):
@@ -255,24 +257,24 @@ class HexBoard:
                 (
                     center_bottom_right[0] + self.radius * cos(angle),
                     center_bottom_right[1] - self.radius * sin(angle),
-                )
+                ),
             )
         pygame.gfxdraw.filled_polygon(self.screen, points, (255, 255, 255))
 
     def _draw_text(self):
         font = pygame.font.SysFont(
-            "Liberation Serif", int(self.diamond_height / (1.5 * self.n))
+            "Liberation Serif", int(self.diamond_height / (1.5 * self.n)),
         )
 
         def render_text(
-            font: pygame.font.Font, n: int
-        ) -> Tuple[List[Surface], List[Surface]]:
+            font: pygame.font.Font, n: int,
+        ) -> tuple[list[Surface], list[Surface]]:
             ord_a = ord("A")
             letters, numbers = [], []
             for i in range(n):
-                l = font.render(chr(ord_a + i), True, (0, 0, 0))
+                label = font.render(chr(ord_a + i), True, (0, 0, 0))
                 num = font.render(str(i + 1), True, (0, 0, 0))
-                letters.append(l)
+                letters.append(label)
                 numbers.append(num)
             return letters, numbers
 
@@ -300,7 +302,6 @@ class HexBoard:
 
     def _draw_hex(self):
         """Draw hexagones"""
-
         for i in range(self.n):
             t_i = (i + 1) / (self.n + 1)
             for j in range(self.n):
@@ -320,20 +321,20 @@ class HexBoard:
                         (
                             self.hex_radius * (1 + percent) * cos(angle) + coords[0],
                             self.hex_radius * (1 + percent) * sin(angle) + coords[1],
-                        )
+                        ),
                     )
                     points_inside.append(
                         (
                             self.hex_radius * (1 - percent) * cos(angle) + coords[0],
                             self.hex_radius * (1 - percent) * sin(angle) + coords[1],
-                        )
+                        ),
                     )
                 pygame.draw.polygon(self.screen, (0, 0, 0), points)
                 pygame.draw.polygon(self.screen, (241, 219, 170), points_inside)
 
     def _draw_debug(self):
         font = pygame.font.SysFont(
-            "Liberation Serif", int(self.diamond_height / (2 * self.n))
+            "Liberation Serif", int(self.diamond_height / (2 * self.n)),
         )
         for i in range(self.n):
             for j in range(self.n):
@@ -360,7 +361,7 @@ class HexBoard:
                 diam = self.hex_radius * 2
                 circle_surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
                 pygame.draw.circle(
-                    circle_surf, color, (diam // 2, diam // 2), self.hex_radius / 1.5
+                    circle_surf, color, (diam // 2, diam // 2), self.hex_radius / 1.5,
                 )
                 pos = (
                     self.hex_pos[i][j][0] - diam // 2,
@@ -372,7 +373,7 @@ class HexBoard:
         for pos, turn in self.pawn_dict.items():
             color = self.MAP_COLOR[turn]
             pygame.draw.circle(
-                self.screen, color, self.hex_pos[pos.x][pos.y], self.hex_radius / 1.5
+                self.screen, color, self.hex_pos[pos.x][pos.y], self.hex_radius / 1.5,
             )
 
     def draw_board(self, debug=False):
@@ -392,10 +393,9 @@ class HexBoard:
         self,
         debug=False,
         mode: Literal["random", "basic", "training"] = "basic",
-        move_queue: Optional[queue.Queue] = None,
+        move_queue: queue.Queue | None = None,
     ):
         """Run main pygame loop"""
-
         # Handle mode
         self.mode = mode
         if mode == "training":

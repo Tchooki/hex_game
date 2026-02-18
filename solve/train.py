@@ -1,13 +1,14 @@
 
-from solve.model import HexNet
-from game.board import Board
-import pickle
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
 
-def train(n_res_block = 10):
+import numpy as np
+import torch
+from torch import nn, optim
+
+from game.board import Board
+from solve.model import HexNet
+
+
+def train(n_res_block=10):
     net = HexNet(n_res_block=n_res_block)
     optimizer = optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-4)
 
@@ -18,7 +19,7 @@ def train(n_res_block = 10):
 
     for epoch in range(n_epochs):
         b = Board(11)
-        board = np.array(b._board).reshape(11,-1)
+        board = np.array(b._board).reshape(11, -1)
         board = torch.from_numpy(board).unsqueeze(0).unsqueeze(0).float()
         # board.unsqueeze(0).shape
         board.size()

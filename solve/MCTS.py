@@ -1,16 +1,22 @@
+from __future__ import annotations
+
+import pathlib
+import queue
 import threading
 import time
+from collections.abc import Callable
 from copy import deepcopy
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
 import torch
 
-from game.board import BLACK, WHITE, Board, Pos
+from game.board import Board, Pos
+from graphics.display import HexBoard
 
 if TYPE_CHECKING:
-    import torch.nn as nn
+    # import torch.nn as nn
 
     from solve.model import HexNet
 
@@ -18,6 +24,9 @@ if TYPE_CHECKING:
 # pylint: disable=invalid-name
 class RootNode:
     """RootNode"""
+
+    action: int | None
+    parent: RootNode | None
 
     def __init__(self, state: Board) -> None:
         self.action = None
@@ -108,7 +117,8 @@ class RootNode:
         return self._children_U
 
     def get_policy(self, temperature=1.0):
-        """Get policy from visit counts with temperature
+        """
+        Get policy from visit counts with temperature
 
         Args:
             temperature (float): Temperature parameter.
@@ -118,6 +128,7 @@ class RootNode:
 
         Returns:
             np.ndarray: Policy distribution over actions
+
         """
         if self.N == 0:
             return np.zeros(self.state.action_space, dtype=float)
@@ -131,17 +142,27 @@ class RootNode:
 
         # Apply temperature: π(a) ∝ N(a)^(1/τ)
         visits_temp = np.power(self.children_N, 1.0 / temperature)
+        if np.sum(visits_temp) == 0:
+            # Return uniform distribution over possible actions if no visits yet
+            policy = np.zeros(self.state.action_space, dtype=float)
+            actions = self.state.actions()
+            if actions:
+                policy[actions] = 1.0 / len(actions)
+            return policy
+
         policy = visits_temp / np.sum(visits_temp)
         return policy
 
     def sample_action(self, temperature=1.0):
-        """Sample an action according to the policy with temperature
+        """
+        Sample an action according to the policy with temperature
 
         Args:
             temperature (float): Temperature parameter
 
         Returns:
             int: Sampled action index
+
         """
         policy = self.get_policy(temperature=temperature)
         action = np.random.choice(self.state.action_space, p=policy)
@@ -175,6 +196,7 @@ class RootNode:
             current.N += 1
             current.sum_V += value
             value = -value  # Negate value as we go up (players alternate)
+            assert current.parent is not None
             current.parent.update_children_Q(current.action)
             current.parent.need_update_U = True
             current.allow_update = True
@@ -182,29 +204,29 @@ class RootNode:
         current.N += 1
         current.sum_V += value
 
-    def best_child(self) -> "Node":
+    def best_child(self) -> Node:
         """Return best child according to Q + U"""
         if self.need_update_U:
             self.update_children_U()
             self.need_update_U = False
 
-        i_max = np.argmax((self.children_Q + self.children_U)).item()
+        i_max = np.argmax(self.children_Q + self.children_U).item()
         if i_max in self.children:
             return self.children[i_max]
-        else:
-            new_state = self.state.light_copy()
-            try:
-                new_state.play(Pos(i_max, self.state.n))
-            except AssertionError:
-                print("Problem")
-                print("Q:", self.children_Q)
-                print("U:", self.children_U)
-            child = Node(new_state, parent=self, action=i_max)
-            self.children[i_max] = child
-            return child
+        new_state = self.state.light_copy()
+        try:
+            new_state.play(Pos(i_max, self.state.n))
+        except AssertionError:
+            print("Problem")
+            print("Q:", self.children_Q)
+            print("U:", self.children_U)
+        child = Node(new_state, parent=self, action=i_max)
+        self.children[i_max] = child
+        return child
 
-    def sample_child(self, temperature=1.0) -> "Node":
-        """Sample a child according to policy with temperature
+    def sample_child(self, temperature=1.0) -> Node:
+        """
+        Sample a child according to policy with temperature
 
         Args:
             temperature (float): Temperature parameter for sampling.
@@ -214,18 +236,18 @@ class RootNode:
 
         Returns:
             Node: Sampled child node
+
         """
         action = self.sample_action(temperature=temperature)
 
         # Get or create the child for this action
         if action in self.children:
             return self.children[action]
-        else:
-            new_state = self.state.light_copy()
-            new_state.play(Pos(action, self.state.n))
-            child = Node(new_state, parent=self, action=action)
-            self.children[action] = child
-            return child
+        new_state = self.state.light_copy()
+        new_state.play(Pos(action, self.state.n))
+        child = Node(new_state, parent=self, action=action)
+        self.children[action] = child
+        return child
 
 
 class Node(RootNode):
@@ -261,7 +283,7 @@ class Node(RootNode):
             self.parent.update_children_Q(self.action)
 
 
-def get_random_transformation():
+def get_random_transformation() -> Callable[[np.ndarray], np.ndarray]:
     """Get random transformation (reflexion along diagonals)"""
     ref1, ref2 = np.random.random(2) > 0.5
 
@@ -276,21 +298,24 @@ def get_random_transformation():
 
 
 def perform_model(
-    model: "HexNet", batch_leaves: List[RootNode]
-) -> Tuple[List[np.ndarray], np.ndarray]:
-    """Forward model and add reflexions
+    model: HexNet,
+    batch_leaves: list[RootNode],
+) -> tuple[list[np.ndarray], np.ndarray]:
+    """
+    Forward model and add reflexions
 
     Args:
         model (HexNet): model
         leaf (RootNode): Node
 
     Returns:
-        Tuple[np.ndarray, float]: Proba and value
+        tuple[np.ndarray, float]: Proba and value
+
     """
     transforms = [get_random_transformation() for _ in range(len(batch_leaves))]
-    # Create batch
+    # Create batch and apply transformations
     states = np.stack(
-        [leaf.state.to_numpy(transforms[i]) for i, leaf in enumerate(batch_leaves)]
+        [leaf.state.to_numpy(transforms[i]) for i, leaf in enumerate(batch_leaves)],
     )
     inputs = torch.from_numpy(states).unsqueeze(1).float()
     if torch.cuda.is_available():
@@ -300,25 +325,26 @@ def perform_model(
         probas, values = model.forward(inputs)
         probas = torch.nn.functional.softmax(probas, dim=1)
     # CPU
-    probas = probas.cpu().numpy()
-    values = values.cpu().squeeze(1).numpy()
+    probas_numpy = probas.cpu().numpy()
+    values_numpy = values.cpu().squeeze(1).numpy()
 
     # undo transforms
-    probas = [
-        transforms[i](probas[i].reshape(model.n, -1)).reshape(-1)
+    probas_transformed = [
+        transforms[i](probas_numpy[i].reshape(model.n, -1)).reshape(-1)
         for i in range(len(batch_leaves))
     ]
-    return probas, values
+    return probas_transformed, values_numpy
 
 
 def MCTS(
     root: RootNode,
-    model: "HexNet",
+    model: HexNet,
     batch_size=16,
     timeout: float = 0.010,
     n_iter: int = 100,
 ) -> RootNode:
-    """Perform Monte-Carlo Tree Search
+    """
+    Perform Monte-Carlo Tree Search
 
     Args:
         root (RootNode): RootNode
@@ -327,36 +353,35 @@ def MCTS(
 
     Returns:
         RootNode: the tree created
+
     """
     # First Root eval
     probas, values = perform_model(model, [root])
     root.expand(probas[0])
     root.backup(values[0].item())
 
-    batch_leaves: List[Node] = []
+    batch_leaves: list[RootNode] = []
     start_time = time.perf_counter()
-    for _ in range(n_iter):
+    for idx_iter in range(n_iter):
         # Find  best child Q + U
         leaf = root.select()
+        batch_leaves.append(leaf)
+        leaf.sum_V -= 10  # Virtual loss
 
-        if len(batch_leaves) < batch_size and (
-            time.perf_counter() - start_time < timeout or not batch_leaves
+        if (
+            len(batch_leaves) == batch_size
+            or (time.perf_counter() - start_time >= timeout and len(batch_leaves) > 0)
+            or idx_iter == n_iter - 1
         ):
-            batch_leaves.append(leaf)
-            leaf.sum_V -= 10  # Virtual loss
-        else:
-            # print(f"Batch {len(batch_leaves)}")
             # predict with model
-            # if len(batch_leaves) < batch_size:
-            #     print("Timout", len(batch_leaves))
             probas, values = perform_model(model, batch_leaves)
             # Expand & backup
-            for i, (proba, value) in enumerate(zip(probas, values)):
-                batch_leaves[i].sum_V += 10  # Restore virtual loss
-                if batch_leaves[i].state.has_won == 0:
-                    batch_leaves[i].expand(proba)
+            for j, (proba, value) in enumerate(zip(probas, values, strict=True)):
+                batch_leaves[j].sum_V += 10  # Restore virtual loss
+                if batch_leaves[j].state.has_won == 0:
+                    batch_leaves[j].expand(proba)
                 # Update V N
-                batch_leaves[i].backup(value)
+                batch_leaves[j].backup(value)
             start_time = time.perf_counter()
             batch_leaves = []
 
@@ -364,16 +389,17 @@ def MCTS(
 
 
 def generate_data(
-    model,
-    n_games,
-    n_random_plays=1,
-    n_iter=10,
-    show=False,
-    save_path=None,
-    temperature=1.0,
-    temperature_threshold=15,
-):
-    """Generate data for training according to model
+    model: HexNet,
+    n_games: int,
+    n_random_plays: int = 1,
+    n_iter: int = 10,
+    show: bool = False,
+    save_path: str | None = None,
+    temperature: float = 1.0,
+    temperature_threshold: int = 15,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Generate data for training according to model.
 
     Args:
         model (HexNet): model that predict
@@ -386,34 +412,34 @@ def generate_data(
         temperature_threshold (int, optional): Number of moves after which temperature → 0. Defaults to 15.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training
-    """
-    import os
+        tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training
 
-    b = Board(11)
-    boards = []
-    policies = []
-    values = []
-    move_queue = None
+    """
+
+    boards: list[np.ndarray] = []
+    policies: list[np.ndarray] = []
+    values: list[float] = []
+    move_queue: queue.Queue | None = None
+
+    b = Board(model.n)
 
     if show:
-        import queue
-
-        from graphics.display import HexBoard
-
         move_queue = queue.Queue()
         threading.Thread(
-            target=lambda: HexBoard(11).run(mode="training", move_queue=move_queue),
+            target=lambda: HexBoard(model.n).run(
+                mode="training",
+                move_queue=move_queue,
+            ),
             daemon=True,
         ).start()
 
-    for game_idx in range(n_games):
+    for _game_idx in range(n_games):
         b.reset()
-        if show:
+        if show and move_queue is not None:
             move_queue.put_nowait("reset")
         for _ in range(n_random_plays):
             pos, _ = b.play_random()
-            if show:
+            if show and move_queue is not None:
                 move_queue.put_nowait(pos)
         root = RootNode(b)
         current = root
@@ -429,7 +455,7 @@ def generate_data(
             current = current.sample_child(temperature=tau)
 
             move_count += 1
-            if show:
+            if show and move_queue is not None and current.action is not None:
                 move_queue.put_nowait(Pos(current.action, current.state.n))
 
         # Game finished, get the winner
@@ -439,19 +465,13 @@ def generate_data(
         game_history.append(current)
 
         # Collect training data from this game
-        # For each position, we store:
-        # - board state (from player perspective)
-        # - improved policy from MCTS (visit counts)
-        # - value target (game outcome from player perspective)
         for node in game_history:
             boards.append(node.state.to_numpy())
 
             # Use improved policy from MCTS (based on visit counts)
-            # Not the network prior (children_P)
             policies.append(node.get_policy())
 
             # Value target is the game outcome from current player's perspective
-            # won is from absolute perspective, need to adjust for current player
             value_target = won * node.state.turn
             values.append(value_target)
 
@@ -463,13 +483,11 @@ def generate_data(
     # Save to disk if path is provided
     if save_path is not None:
         # Create data directory if it doesn't exist
-        os.makedirs(save_path, exist_ok=True)
+        pathlib.Path(save_path).mkdir(exist_ok=True, parents=True)
 
         # Generate filename with timestamp
-        import time
-
         timestamp = int(time.time())
-        filename = os.path.join(save_path, f"selfplay_data_{timestamp}.npz")
+        filename = pathlib.Path(save_path) / f"selfplay_data_{timestamp}.npz"
 
         # Save in compressed format
         np.savez_compressed(
