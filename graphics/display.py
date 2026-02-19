@@ -10,7 +10,7 @@ import pygame
 import pygame.gfxdraw
 from pygame import Surface
 
-from game.board import BLACK, WHITE, Board, Pos
+from game.board import BLACK, WHITE, Board
 
 
 class HexBoard:
@@ -31,7 +31,7 @@ class HexBoard:
         self.running = True
 
         self.board = Board(self.n)
-        self.pawn_dict: dict[Pos, int] = OrderedDict()
+        self.pawn_dict: dict[int, int] = OrderedDict()
 
         self.hex_pos: list[list[tuple[float, float]]] = [
             [(0, 0)] * self.n for _ in range(self.n)
@@ -56,10 +56,11 @@ class HexBoard:
                 # print("Resize:", event.x, event.y)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.can_play and self.hover_index:
-                    pos = Pos(self.hover_index, self.n)
-                    if self.board.can_play(pos):
-                        self.pawn_dict[pos] = self.board.turn
-                        self.board.play(pos)
+                    i, j = self.hover_index
+                    index = i * self.n + j
+                    if self.board.can_play(index):
+                        self.pawn_dict[index] = self.board.turn
+                        self.board.play(index)
 
     def computer_move(self):
         """Move from computer of AI"""
@@ -71,11 +72,11 @@ class HexBoard:
             while (
                 isinstance(self.move_queue, queue.Queue) and not self.move_queue.empty()
             ):
-                pos = self.move_queue.get_nowait()
+                action = self.move_queue.get_nowait()
                 self.move_queue.task_done()
-                if isinstance(pos, Pos):
-                    self.pawn_dict[pos] = self.board.turn
-                    self.board.play(pos)
+                if isinstance(action, int):
+                    self.pawn_dict[action] = self.board.turn
+                    self.board.play(action)
                 elif pos == "reset":
                     self.reset()
 
@@ -263,11 +264,13 @@ class HexBoard:
 
     def _draw_text(self):
         font = pygame.font.SysFont(
-            "Liberation Serif", int(self.diamond_height / (1.5 * self.n)),
+            "Liberation Serif",
+            int(self.diamond_height / (1.5 * self.n)),
         )
 
         def render_text(
-            font: pygame.font.Font, n: int,
+            font: pygame.font.Font,
+            n: int,
         ) -> tuple[list[Surface], list[Surface]]:
             ord_a = ord("A")
             letters, numbers = [], []
@@ -334,12 +337,14 @@ class HexBoard:
 
     def _draw_debug(self):
         font = pygame.font.SysFont(
-            "Liberation Serif", int(self.diamond_height / (2 * self.n)),
+            "Liberation Serif",
+            int(self.diamond_height / (2 * self.n)),
         )
         for i in range(self.n):
             for j in range(self.n):
-                color = (0, 0, 0) if self.board[Pos(i, j)] >= 0 else (255, 255, 255)
-                num = font.render(str(self.board[Pos(i, j)]), True, color)
+                index = i * self.n + j
+                color = (0, 0, 0) if self.board[index] >= 0 else (255, 255, 255)
+                num = font.render(str(self.board[index]), True, color)
                 text_rect = num.get_rect(center=self.hex_pos[i][j])
                 self.screen.blit(num, text_rect)
 
@@ -358,22 +363,30 @@ class HexBoard:
                 )
 
                 i, j = self.hover_index
+                index = i * self.n + j
                 diam = self.hex_radius * 2
                 circle_surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
                 pygame.draw.circle(
-                    circle_surf, color, (diam // 2, diam // 2), self.hex_radius / 1.5,
+                    circle_surf,
+                    color,
+                    (diam // 2, diam // 2),
+                    self.hex_radius / 1.5,
                 )
-                pos = (
+                pos_draw = (
                     self.hex_pos[i][j][0] - diam // 2,
                     self.hex_pos[i][j][1] - diam // 2,
                 )
-                self.screen.blit(circle_surf, pos)
+                self.screen.blit(circle_surf, pos_draw)
 
         # Draw pawns
-        for pos, turn in self.pawn_dict.items():
+        for index, turn in self.pawn_dict.items():
             color = self.MAP_COLOR[turn]
+            i, j = divmod(index, self.n)
             pygame.draw.circle(
-                self.screen, color, self.hex_pos[pos.x][pos.y], self.hex_radius / 1.5,
+                self.screen,
+                color,
+                self.hex_pos[i][j],
+                self.hex_radius / 1.5,
             )
 
     def draw_board(self, debug=False):

@@ -12,7 +12,7 @@ import networkx as nx
 import numpy as np
 import torch
 
-from game.board import Board, Pos
+from game.board import Board
 from graphics.display import HexBoard
 
 if TYPE_CHECKING:
@@ -50,41 +50,43 @@ class RootNode:
         self.need_update_U = False
         self.update_children_U()
 
-        self.N_root = 0
-        self.sum_V_root = 0
+        self.N_root: int = 0
+        self.sum_V_root: float = 0
 
-    def build_graph(self):
-        G = nx.DiGraph()
+    def build_graph(self) -> nx.DiGraph:
+        graph = nx.DiGraph()
         stack = [self]
-        G.add_node("Root")
+        graph.add_node("Root")
         while stack:
             current = stack.pop()
             node_id = (
-                str(Pos(current.action, self.state.n))
-                if isinstance(current, Node)
+                f"({current.action // self.state.n}, {current.action % self.state.n})"
+                if isinstance(current, Node) and current.action is not None
                 else "Root"
             )
             for child in current.children.values():
-                child_id = str(Pos(child.action, self.state.n))
-                G.add_edge(node_id, child_id)
+                child_id = (
+                    f"({child.action // self.state.n}, {child.action % self.state.n})"
+                )
+                graph.add_edge(node_id, child_id)
                 stack.append(child)
 
-        return G
+        return graph
 
     @property
-    def N(self):
+    def N(self) -> int:
         return self.N_root
 
     @N.setter
-    def N(self, value):
+    def N(self, value: int) -> None:
         self.N_root = value
 
     @property
-    def sum_V(self):
+    def sum_V(self) -> float:
         return self.sum_V_root
 
     @sum_V.setter
-    def sum_V(self, value):
+    def sum_V(self, value: float) -> None:
         self.sum_V_root = value
 
     @property
@@ -104,8 +106,8 @@ class RootNode:
         """Action values"""
         return self._children_Q
 
-    def update_children_U(self, c=1):
-        """Update children U"""
+    def update_children_U(self, c: float = 1.0) -> None:
+        """Update children U."""
         if self.allow_update:
             self._children_U = (
                 c
@@ -115,13 +117,13 @@ class RootNode:
             )
 
     @property
-    def children_U(self):
-        """Explore factor"""
+    def children_U(self) -> np.ndarray:
+        """Explore factor."""
         return self._children_U
 
-    def get_policy(self, temperature=1.0):
+    def get_policy(self, temperature: float = 1.0) -> np.ndarray:
         """
-        Get policy from visit counts with temperature
+        Get policy from visit counts with temperature.
 
         Args:
             temperature (float): Temperature parameter.
@@ -156,12 +158,12 @@ class RootNode:
         policy = visits_temp / np.sum(visits_temp)
         return policy
 
-    def sample_action(self, temperature=1.0):
+    def sample_action(self, temperature: float = 1.0) -> int:
         """
-        Sample an action according to the policy with temperature
+        Sample an action according to the policy with temperature.
 
         Args:
-            temperature (float): Temperature parameter
+            temperature (float): Temperature parameter.
 
         Returns:
             int: Sampled action index
@@ -218,7 +220,7 @@ class RootNode:
             return self.children[i_max]
         new_state = self.state.light_copy()
         try:
-            new_state.play(Pos(i_max, self.state.n))
+            new_state.play(i_max)
         except AssertionError:
             print("Problem")
             print("Q:", self.children_Q)
@@ -227,9 +229,9 @@ class RootNode:
         self.children[i_max] = child
         return child
 
-    def sample_child(self, temperature=1.0) -> Node:
+    def sample_child(self, temperature: float = 1.0) -> Node:
         """
-        Sample a child according to policy with temperature
+        Sample a child according to policy with temperature.
 
         Args:
             temperature (float): Temperature parameter for sampling.
@@ -247,7 +249,7 @@ class RootNode:
         if action in self.children:
             return self.children[action]
         new_state = self.state.light_copy()
-        new_state.play(Pos(action, self.state.n))
+        new_state.play(action)
         child = Node(new_state, parent=self, action=action)
         self.children[action] = child
         return child
@@ -275,12 +277,12 @@ class Node(RootNode):
 
     @property
     def sum_V(self):
-        """Sum of values getter"""
+        """Sum of values getter."""
         return self.parent.children_sum_V[self.action]
 
     @sum_V.setter
     def sum_V(self, value):
-        """Sum of values setter"""
+        """Sum of values setter."""
         self.parent.children_sum_V[self.action] = value
         if self.allow_update:
             self.parent.update_children_Q(self.action)
@@ -342,12 +344,12 @@ def perform_model(
 def MCTS(
     root: RootNode,
     model: HexNet,
-    batch_size=16,
+    batch_size: int = 16,
     timeout: float = 0.010,
     n_iter: int = 100,
 ) -> RootNode:
     """
-    Perform Monte-Carlo Tree Search
+    Perform Monte-Carlo Tree Search.
 
     Args:
         root (RootNode): RootNode
@@ -418,7 +420,6 @@ def generate_data(
         tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training
 
     """
-
     boards: list[np.ndarray] = []
     policies: list[np.ndarray] = []
     values: list[float] = []
@@ -459,7 +460,7 @@ def generate_data(
 
             move_count += 1
             if show and move_queue is not None and current.action is not None:
-                move_queue.put_nowait(Pos(current.action, current.state.n))
+                move_queue.put_nowait(current.action)
 
         # Game finished, get the winner
         won = current.state.has_won

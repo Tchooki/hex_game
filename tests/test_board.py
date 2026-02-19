@@ -1,4 +1,4 @@
-from game.board import BLACK, WHITE, Board, Pos
+from game.board import BLACK, WHITE, Board
 
 
 def test_union_find():
@@ -17,11 +17,11 @@ def test_white_win():
     # White needs to connect top (0,1,2) to bottom (6,7,8)
 
     # Play a horizontal line (y=0 to y=2)
-    b.play(Pos((0, 0), 3))  # W
-    b.play(Pos((1, 0), 3))  # B
-    b.play(Pos((0, 1), 3))  # W
-    b.play(Pos((1, 1), 3))  # B
-    b.play(Pos((0, 2), 3))  # W
+    b.play(0 * 3 + 0)  # (0, 0) W
+    b.play(1 * 3 + 0)  # (1, 0) B
+    b.play(0 * 3 + 1)  # (0, 1) W
+    b.play(1 * 3 + 1)  # (1, 1) B
+    b.play(0 * 3 + 2)  # (0, 2) W
     # Should be win
     assert b.has_won == WHITE
 
@@ -31,15 +31,15 @@ def test_black_win():
     # Black needs to connect left (0,3,6) to right (2,5,8)
 
     # Play a vertical line (x=0 to x=2)
-    b.play(Pos((0, 0), 3))  # B
-    b.play(Pos((0, 1), 3))  # W
-    b.play(Pos((1, 0), 3))  # B
-    b.play(Pos((1, 1), 3))  # W
-    b.play(Pos((2, 0), 3))  # B
+    b.play(0 * 3 + 0)  # (0, 0) B
+    b.play(0 * 3 + 1)  # (0, 1) W
+    b.play(1 * 3 + 0)  # (1, 0) B
+    b.play(1 * 3 + 1)  # (1, 1) W
+    b.play(2 * 3 + 0)  # (2, 0) B
     assert b.has_won == BLACK
 
 
 def test_no_win():
     b = Board(3)
-    b.play(Pos((0, 0), 3))
+    b.play(0 * 3 + 0)
     assert b.has_won == 0

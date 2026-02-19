@@ -1,30 +1,33 @@
-"""Board of hex in n x n grid slice"""
+"""Board of hex in n x n grid slice."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import torch
-from numpy.random import choice
 
 WHITE: int = 1
 BLACK: int = -1
 
+RNG = np.random.default_rng()
+
 
 class UnionFind:
-    """disjoint-set data structure"""
+    """Disjoint-set data structure."""
 
-    def __init__(self, n):
+    def __init__(self, n: int) -> None:
         self.parent = list(range(n))
         self.rank = [0] * n
 
-    def find(self, i):
-        """Find the representative of the set containing i"""
+    def find(self, i: int) -> int:
+        """Find the representative of the set containing i."""
         if self.parent[i] != i:
             self.parent[i] = self.find(self.parent[i])
         return self.parent[i]
 
-    def union(self, i, j):
-        """Union the sets containing i and j"""
+    def union(self, i: int, j: int) -> bool:
+        """Union the sets containing i and j."""
         root_i = self.find(i)
         root_j = self.find(j)
         if root_i != root_j:
@@ -39,81 +42,8 @@ class UnionFind:
         return False
 
 
-class Pos:
-    __slots__ = ("n", "pos", "x", "y")
-
-    def __init__(self, pos: tuple[int, int] | int, n: int) -> None:
-        self.n = n
-        if isinstance(pos, int):
-            self.pos = pos
-            self.x, self.y = self.decode_coord(pos)
-        elif isinstance(pos, tuple):
-            self.x = pos[0]
-            self.y = pos[1]
-            self.pos = self.encode_coord(pos)
-        else:
-            raise TypeError
-
-    def __hash__(self) -> int:
-        return self.pos
-
-    def __eq__(self, value: object) -> bool:
-        if isinstance(value, Pos):
-            return self.pos == value.pos
-        raise TypeError
-
-    def get(self):
-        """
-        Getter
-
-        Returns:
-            int: encoded pos
-
-        """
-        return self.pos
-
-    def __repr__(self) -> str:
-        return f"({self.x}, {self.y})"
-
-    def __str__(self) -> str:
-        return self.__repr__()
-
-    def encode_coord(self, key: tuple[int, int]) -> int:
-        """Encode coord"""
-        return key[0] * self.n + key[1]
-
-    def decode_coord(self, key: int) -> tuple[int, int]:
-        """Decode coord"""
-        return key // self.n, key % self.n
-
-    def get_neighbours(self) -> list[Pos]:
-        """
-        Get valid neighbours next to key
-
-        Args:
-            key (tuple[int, int]): coord
-
-        Yields:
-            tuple[int, int]: neighbor coord
-
-        """
-        rslt = []
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                if (
-                    self.x + i < 0
-                    or self.x + i >= self.n
-                    or self.y + j < 0
-                    or self.y + j >= self.n
-                    or i == j
-                ):
-                    continue
-                rslt.append(Pos((self.x + i, self.y + j), self.n))
-        return rslt
-
-
 class Board:
-    """Representing Board of hex in n x n grid"""
+    """Representing Board of hex in n x n grid."""
 
     def __init__(self, n: int, turn: int = WHITE) -> None:
         self.n = n
@@ -140,8 +70,8 @@ class Board:
         for i in range(self.n):
             chain += "|"
             for j in range(self.n):
-                pos = Pos((i, j), self.n)
-                car = self[pos]
+                idx = i * self.n + j
+                car = self._board[idx]
                 if car == WHITE:
                     chain += "O"
                 elif car == BLACK:
@@ -152,19 +82,34 @@ class Board:
             chain += "\n" + " " * (i + 1)
         return chain
 
-    def __getitem__(self, pos: Pos) -> int:
-        return self._board[pos.get()]
+    def decode_coord(self, key: int) -> tuple[int, int]:
+        """Decode index to (x, y)."""
+        return key // self.n, key % self.n
 
-    def __setitem__(self, pos: Pos, new_value: int):
-        self._board[pos.get()] = new_value
+    def get_neighbours(self, index: int) -> list[int]:
+        """Get valid neighbours for a given index."""
+        x, y = self.decode_coord(index)
+        rslt = []
+        for i in range(-1, 2):
+            for j in range(-1, 2):
+                nx, ny = x + i, y + j
+                if (0 <= nx < self.n) and (0 <= ny < self.n) and (i != j):
+                    rslt.append(nx * self.n + ny)
+        return rslt
 
-    def reset(self):
+    def __getitem__(self, index: int) -> int:
+        return self._board[index]
+
+    def __setitem__(self, index: int, new_value: int) -> None:
+        self._board[index] = new_value
+
+    def reset(self) -> None:
         self.has_won = 0
         self.turn = WHITE
         self._board = [0 for _ in range(self.n**2)]
         self.uf = UnionFind(self.n**2 + 4)
 
-    def light_copy(self):
+    def light_copy(self) -> Board:
         new_board = Board(self.n, self.turn)
         new_board._board = self._board[:]  # faster copy
         # Deep copy of UF state
@@ -172,22 +117,22 @@ class Board:
         new_board.uf.rank = self.uf.rank[:]
         return new_board
 
-    def can_play(self, pos: Pos) -> bool:
+    def can_play(self, index: int) -> bool:
         """
-        If we can play at coord
+        If we can play at index.
 
         Args:
-            pos (Pos): coord
+            index (int): index
 
         Returns:
             bool: if we can play
 
         """
-        return self[pos] == 0
+        return self._board[index] == 0
 
     def actions(self) -> list[int]:
         """
-        Create generator that yield all possible actions (i.e. empty spaces)
+        Create generator that yield all possible actions (i.e. empty spaces).
 
         Yields:
             int: coord
@@ -199,13 +144,37 @@ class Board:
                 rslt.append(i)
         return rslt
 
-    def to_numpy(self, transform=None) -> np.ndarray:
+    def to_numpy(
+        self, transform: Callable[[np.ndarray], np.ndarray] | None = None
+    ) -> np.ndarray:
+        """
+        Convert board to numpy array.
+
+        Args:
+            transform (Callable[[np.ndarray], np.ndarray] | None): transform to apply to the board
+
+        Returns:
+            np.ndarray: numpy array representation of the board
+
+        """
         b = np.array(self._board).reshape(self.n, -1) * self.turn
         if transform:
             b = transform(b)
         return b
 
-    def to_tensor(self, transform=None) -> torch.Tensor:
+    def to_tensor(
+        self, transform: Callable[[np.ndarray], np.ndarray] | None = None
+    ) -> torch.Tensor:
+        """
+        Convert board to tensor.
+
+        Args:
+            transform (Callable[[np.ndarray], np.ndarray] | None): transform to apply to the board
+
+        Returns:
+            torch.Tensor: tensor representation of the board
+
+        """
         b = np.array(self._board).reshape(self.n, -1) * self.turn
         if transform:
             b = transform(b)
@@ -214,48 +183,49 @@ class Board:
             t = t.cuda()
         return t
 
-    def play_random(self) -> tuple[Pos, int]:
+    def play_random(self) -> tuple[int, int]:
         actions = self.actions()
         if not actions:
             raise ValueError("Board is full")
-        pos = Pos(choice(actions).item(), self.n)
-        return pos, self.play(pos)
+        index = RNG.choice(actions).item()
+        return index, self.play(index)
 
-    def play(self, pos: Pos, verbose=False) -> int:
+    def play(self, index: int, verbose: bool = False) -> int:
         """
         Play a move a tell if it's a win or not.
 
         Args:
-            pos (Pos): coord
+            index (int): index
             verbose (bool): verbose mode
 
         Returns:
             int: 0 if nobody win else, -1 Black or 1 White
 
         """
-        assert self.can_play(pos), (
-            f"Can't play at pos {pos}, {'white' if self[pos] == WHITE else 'black'} has a pawn here."
-        )
+        if not self.can_play(index):
+            x, y = self.decode_coord(index)
+            msg = f"Can't play at pos ({x}, {y}), {'white' if self._board[index] == WHITE else 'black'} has a pawn here."
+            raise ValueError(msg)
 
-        self[pos] = self.turn
-        idx = pos.get()
+        self._board[index] = self.turn
+        x, y = self.decode_coord(index)
 
         # Connect to borders
         if self.turn == WHITE:
-            if pos.y == 0:
-                self.uf.union(idx, self.white_top)
-            if pos.y == self.n - 1:
-                self.uf.union(idx, self.white_bottom)
+            if y == 0:
+                self.uf.union(index, self.white_top)
+            if y == self.n - 1:
+                self.uf.union(index, self.white_bottom)
         else:  # BLACK
-            if pos.x == 0:
-                self.uf.union(idx, self.black_left)
-            if pos.x == self.n - 1:
-                self.uf.union(idx, self.black_right)
+            if x == 0:
+                self.uf.union(index, self.black_left)
+            if x == self.n - 1:
+                self.uf.union(index, self.black_right)
 
         # Union with neighbors of same color
-        for neighbour in pos.get_neighbours():
-            if self[neighbour] == self.turn:
-                self.uf.union(idx, neighbour.get())
+        for neighbour in self.get_neighbours(index):
+            if self._board[neighbour] == self.turn:
+                self.uf.union(index, neighbour)
 
         # Check win
         if self.turn == WHITE:
@@ -271,5 +241,5 @@ class Board:
             return self.turn
 
         # Change turn
-        self.turn = self.turn * -1
+        self.turn *= -1
         return 0
