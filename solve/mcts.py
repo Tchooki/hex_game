@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 
 # pylint: disable=invalid-name
+RNG = np.random.default_rng()
+
+
 class RootNode:
     """RootNode"""
 
@@ -165,7 +168,7 @@ class RootNode:
 
         """
         policy = self.get_policy(temperature=temperature)
-        action = np.random.choice(self.state.action_space, p=policy)
+        action = RNG.choice(self.state.action_space, p=policy)
         return action
 
     def expand(self, proba_model: np.ndarray):
@@ -284,10 +287,10 @@ class Node(RootNode):
 
 
 def get_random_transformation() -> Callable[[np.ndarray], np.ndarray]:
-    """Get random transformation (reflexion along diagonals)"""
-    ref1, ref2 = np.random.random(2) > 0.5
+    """Get random transformation (reflexion along diagonals)."""
+    ref1, ref2 = RNG.random(2) > 0.5
 
-    def transform(b: np.ndarray):
+    def transform(b: np.ndarray) -> np.ndarray:
         if ref1:
             b = b.T
         if ref2:
@@ -302,11 +305,11 @@ def perform_model(
     batch_leaves: list[RootNode],
 ) -> tuple[list[np.ndarray], np.ndarray]:
     """
-    Forward model and add reflexions
+    Forward model and add reflexions.
 
     Args:
         model (HexNet): model
-        leaf (RootNode): Node
+        batch_leaves (list[RootNode]): leaves nodes
 
     Returns:
         tuple[np.ndarray, float]: Proba and value

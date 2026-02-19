@@ -1,7 +1,7 @@
 .PHONY: test lint check all
 
 test:
-	uv run python -m unittest discover tests
+	uv run pytest tests
 
 lint:
 	uv run ruff check .
