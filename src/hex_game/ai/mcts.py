@@ -12,13 +12,13 @@ import networkx as nx
 import numpy as np
 import torch
 
-from game.board import Board
-from graphics.display import HexBoard
+from hex_game.game.board import Board
+from hex_game.ui.display import HexBoard
 
 if TYPE_CHECKING:
     # import torch.nn as nn
 
-    from solve.model import HexNet
+    from hex_game.ai.model import HexNet
 
 
 # pylint: disable=invalid-name
@@ -259,11 +259,13 @@ class Node(RootNode):
     @property
     def N(self):
         """Number of visit getter"""
+        assert self.parent is not None
         return self.parent.children_N[self.action]
 
     @N.setter
     def N(self, value):
         """Number of visit setter"""
+        assert self.parent is not None
         self.parent.sum_children_N += value - self.parent.children_N[self.action]
         self.parent.children_N[self.action] = value
         if self.allow_update:
@@ -273,11 +275,13 @@ class Node(RootNode):
     @property
     def sum_V(self):
         """Sum of values getter."""
+        assert self.parent is not None
         return self.parent.children_sum_V[self.action]
 
     @sum_V.setter
     def sum_V(self, value):
         """Sum of values setter."""
+        assert self.parent is not None
         self.parent.children_sum_V[self.action] = value
         if self.allow_update:
             self.parent.update_children_Q(self.action)

@@ -7,8 +7,14 @@ lint:
 	uv run ruff check .
 
 mypy:
-	uv run mypy .
+	uv run mypy src
 
 check: lint mypy test
+
+play:
+	uv run hex-play
+
+train:
+	uv run hex-train
 
 all: check

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 
-from solve.mcts import generate_data
+from hex_game.ai.mcts import generate_data
 
 
 class MockModel:

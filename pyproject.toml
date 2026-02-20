@@ -14,6 +14,17 @@ dependencies = [
 [dependency-groups]
 dev = ["mypy>=1.19.1", "pytest>=9.0.2", "types-networkx>=3.6.1.20260210"]
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+hex-play = "hex_game.main:main"
+hex-train = "hex_game.ai.train:train"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.ruff]
 # Configuration du projet
 line-length = 88
@@ -33,3 +44,10 @@ ignore = [
 [tool.ruff.lint.pep8-naming]
 # On peut aussi lister les noms spécifiquement autorisés ici si on ne veut pas tout ignorer
 ignore-names = ["N", "P", "Q", "V", "U"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+explicit_package_bases = true
+check_untyped_defs = true
+ignore_missing_imports = true

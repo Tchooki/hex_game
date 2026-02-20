@@ -6,4 +6,9 @@ __pycache__/
 *.stats
 
 profile/
-ressources/
+resources/
+data/
+
+
+# Build
+*.egg-info/

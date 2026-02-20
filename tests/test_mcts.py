@@ -1,6 +1,6 @@
 import numpy as np
 
-from solve.mcts import get_random_transformation
+from hex_game.ai.mcts import get_random_transformation
 
 
 def test_reflexion():
@@ -17,5 +17,5 @@ def test_reflexion_with_flatten():
     for _ in range(20):
         trans = get_random_transformation()
         data_trans = data.copy().reshape(10, -1)
-        data_trans = trans(trans(data_trans)).reshape(-1)
-        assert (data == data_trans).all()
+        data_trans_flat = trans(trans(data_trans)).reshape(-1)
+        assert (data == data_trans_flat).all()

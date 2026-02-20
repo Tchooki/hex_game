@@ -1,4 +1,4 @@
-from game.board import BLACK, WHITE, Board
+from hex_game.game.board import BLACK, WHITE, Board
 
 
 def test_union_find():

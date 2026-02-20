@@ -10,7 +10,7 @@ import pygame
 import pygame.gfxdraw
 from pygame import Surface
 
-from game.board import BLACK, WHITE, Board
+from hex_game.game.board import BLACK, WHITE, Board
 
 
 class HexBoard:
@@ -39,7 +39,7 @@ class HexBoard:
 
         self.move_queue: queue.Queue | None = None
         self.can_play = True
-        self.hover_index = None
+        self.hover_index: tuple[int, int] | None = None
         self.turn = WHITE
         self.quit = False
         self.update_window()
@@ -380,11 +380,11 @@ class HexBoard:
 
         # Draw pawns
         for index, turn in self.pawn_dict.items():
-            color = self.MAP_COLOR[turn]
+            pawn_color = self.MAP_COLOR[turn]
             i, j = divmod(index, self.n)
             pygame.draw.circle(
                 self.screen,
-                color,
+                pawn_color,
                 self.hex_pos[i][j],
                 self.hex_radius / 1.5,
             )
