@@ -15,7 +15,8 @@ class MockModel:
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = x.shape[0]
-        # Return random probabilities (not normalized yet as perform_model handles softmax)
+        # Return random probabilities
+        #           (not normalized yet as perform_model handles softmax)
         probas = torch.randn(batch_size, self.n * self.n)
         # Return random values between -1 and 1
         values = torch.tanh(torch.randn(batch_size, 1))
@@ -45,7 +46,8 @@ def test_generate_data_shapes(model, n):
     assert isinstance(policies, np.ndarray)
     assert isinstance(values, np.ndarray)
 
-    # Number of positions generated should be at least n_games (if game ends immediately)
+    # Number of positions generated should be at least n_games
+    #   (if game ends immediately)
     assert len(boards) >= n_games
     assert len(boards) == len(policies)
     assert len(boards) == len(values)

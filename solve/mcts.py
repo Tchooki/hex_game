@@ -26,18 +26,15 @@ RNG = np.random.default_rng()
 
 
 class RootNode:
-    """RootNode"""
-
-    action: int | None
-    parent: RootNode | None
+    """RootNode."""
 
     def __init__(self, state: Board) -> None:
-        self.action = None
-        self.parent = None
-        self.is_expanded = False
-        self.state = deepcopy(state)
-        self.possible_actions = self.state.actions()
-        self.children: dict[int, Node] = dict()
+        self.action: int | None = None
+        self.parent: RootNode | None = None
+        self.is_expanded: bool = False
+        self.state: Board = deepcopy(state)
+        self.possible_actions: list[int] = self.state.actions()
+        self.children: dict[int, Node] = {}
 
         self.children_P = np.zeros(self.state.action_space, dtype=float)
         self.children_sum_V = np.zeros(self.state.action_space, dtype=float)
@@ -46,15 +43,15 @@ class RootNode:
 
         self.allow_update = True
         self._children_Q = np.zeros(self.state.action_space, dtype=float)
-        self._children_U = None
-        self.need_update_U = False
+        self._children_U: np.ndarray
+        self.need_update_U = True
         self.update_children_U()
 
         self.N_root: int = 0
         self.sum_V_root: float = 0
 
     def build_graph(self) -> nx.DiGraph:
-        graph = nx.DiGraph()
+        graph: nx.DiGraph = nx.DiGraph()
         stack = [self]
         graph.add_node("Root")
         while stack:
@@ -64,10 +61,8 @@ class RootNode:
                 if isinstance(current, Node) and current.action is not None
                 else "Root"
             )
-            for child in current.children.values():
-                child_id = (
-                    f"({child.action // self.state.n}, {child.action % self.state.n})"
-                )
+            for action, child in current.children.items():
+                child_id = f"({action // self.state.n}, {action % self.state.n})"
                 graph.add_edge(node_id, child_id)
                 stack.append(child)
 
@@ -409,12 +404,16 @@ def generate_data(
     Args:
         model (HexNet): model that predict
         n_games (int): number of games generated
-        n_random_plays (int, optional): first plays that are chosen randomly. Defaults to 1.
+        n_random_plays (int, optional): first plays that are chosen randomly.
+                                        Defaults to 1.
         n_iter (int, optional): number of iteration in MCTS. Defaults to 10.
-        show (bool, optional): Show with pygame the generation of data. Defaults to False.
-        save_path (str, optional): Path to save data in compressed format. If None, data is not saved. Defaults to None.
+        show (bool, optional): Show with pygame the generation of data.
+                            Defaults to False.
+        save_path (str, optional): Path to save data in compressed format.
+                            If None, data is not saved. Defaults to None.
         temperature (float, optional): Temperature for move selection. Defaults to 1.0.
-        temperature_threshold (int, optional): Number of moves after which temperature → 0. Defaults to 15.
+        temperature_threshold (int, optional): Number of moves after which
+                            temperature → 0. Defaults to 15.
 
     Returns:
         tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training

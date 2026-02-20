@@ -151,7 +151,8 @@ class Board:
         Convert board to numpy array.
 
         Args:
-            transform (Callable[[np.ndarray], np.ndarray] | None): transform to apply to the board
+            transform (Callable[[np.ndarray], np.ndarray] | None):
+                transform to apply to the board
 
         Returns:
             np.ndarray: numpy array representation of the board
@@ -169,7 +170,8 @@ class Board:
         Convert board to tensor.
 
         Args:
-            transform (Callable[[np.ndarray], np.ndarray] | None): transform to apply to the board
+            transform (Callable[[np.ndarray], np.ndarray] | None):
+                transform to apply to the board
 
         Returns:
             torch.Tensor: tensor representation of the board
@@ -204,7 +206,8 @@ class Board:
         """
         if not self.can_play(index):
             x, y = self.decode_coord(index)
-            msg = f"Can't play at pos ({x}, {y}), {'white' if self._board[index] == WHITE else 'black'} has a pawn here."
+            player = "white" if self._board[index] == WHITE else "black"
+            msg = f"Can't play at pos ({x}, {y}), {player} has a pawn here."
             raise ValueError(msg)
 
         self._board[index] = self.turn
