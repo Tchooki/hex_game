@@ -468,8 +468,8 @@ def generate_data(
         # Add the final position
         game_history.append(current)
 
-        # Collect training data from this game
-        for node in game_history:
+        # Collect training data from this game (skip terminal state)
+        for node in game_history[:-1]:
             boards.append(node.state.to_numpy())
 
             # Use improved policy from MCTS (based on visit counts)

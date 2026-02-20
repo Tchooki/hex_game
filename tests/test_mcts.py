@@ -8,7 +8,7 @@ def test_reflexion():
     data = rng.integers(-10, 10, (10, 10))
     for _ in range(20):
         trans = get_random_transformation()
-        assert (data == trans(trans(data.copy()))).any()
+        assert (data == trans(trans(data.copy()))).all()
 
 
 def test_reflexion_with_flatten():
@@ -18,4 +18,4 @@ def test_reflexion_with_flatten():
         trans = get_random_transformation()
         data_trans = data.copy().reshape(10, -1)
         data_trans = trans(trans(data_trans)).reshape(-1)
-        assert (data == data_trans).any()
+        assert (data == data_trans).all()
