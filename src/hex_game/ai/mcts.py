@@ -345,7 +345,8 @@ def MCTS(
     model: HexNet,
     batch_size: int = 16,
     timeout: float = 0.010,
-    n_iter: int = 100,
+    n_iter: int | None = 100,
+    time_limit: float | None = None,
 ) -> RootNode:
     """
     Perform Monte-Carlo Tree Search.
@@ -353,11 +354,13 @@ def MCTS(
     Args:
         root (RootNode): RootNode
         model (HexNet): DL model to predict value and proba
-        n_iter (int, optional): Number of iterations of MCTS. Defaults to 100.
+        batch_size (int): Size of batch for model evaluation
+        timeout (float): Max time to wait for a batch (seconds)
+        n_iter (int, optional): Number of iterations of MCTS.
+        time_limit (float, optional): Max time for total search (seconds).
 
     Returns:
         RootNode: the tree created
-
     """
     # First Root eval
     probas, values = perform_model(model, [root])
@@ -365,29 +368,49 @@ def MCTS(
     root.backup(values[0].item())
 
     batch_leaves: list[RootNode] = []
-    start_time = time.perf_counter()
-    for idx_iter in range(n_iter):
-        # Find  best child Q + U
+    global_start_time = time.perf_counter()
+    batch_start_time = global_start_time
+
+    idx_iter = 0
+    while True:
+        # Check termination conditions
+        if n_iter is not None and idx_iter >= n_iter:
+            break
+        if (
+            time_limit is not None
+            and (time.perf_counter() - global_start_time) >= time_limit
+        ):
+            break
+
+        # Find best child Q + U
         leaf = root.select()
         batch_leaves.append(leaf)
         leaf.sum_V -= 10  # Virtual loss
 
-        if (
-            len(batch_leaves) == batch_size
-            or (time.perf_counter() - start_time >= timeout and len(batch_leaves) > 0)
-            or idx_iter == n_iter - 1
-        ):
-            # predict with model
-            probas, values = perform_model(model, batch_leaves)
-            # Expand & backup
-            for j, (proba, value) in enumerate(zip(probas, values, strict=True)):
-                batch_leaves[j].sum_V += 10  # Restore virtual loss
-                if batch_leaves[j].state.has_won == 0:
-                    batch_leaves[j].expand(proba)
-                # Update V N
-                batch_leaves[j].backup(value)
-            start_time = time.perf_counter()
-            batch_leaves = []
+        # Check if we should run the model
+        reached_batch = len(batch_leaves) == batch_size
+        batch_timeout = (time.perf_counter() - batch_start_time) >= timeout
+        last_iter = n_iter is not None and idx_iter == n_iter - 1
+        search_timeout = (
+            time_limit is not None
+            and (time.perf_counter() - global_start_time) >= time_limit
+        )
+
+        if reached_batch or batch_timeout or last_iter or search_timeout:
+            if len(batch_leaves) > 0:
+                # predict with model
+                probas, values = perform_model(model, batch_leaves)
+                # Expand & backup
+                for j, (proba, value) in enumerate(zip(probas, values, strict=True)):
+                    batch_leaves[j].sum_V += 10  # Restore virtual loss
+                    if batch_leaves[j].state.has_won == 0:
+                        batch_leaves[j].expand(proba)
+                    # Update V N
+                    batch_leaves[j].backup(value)
+                batch_start_time = time.perf_counter()
+                batch_leaves = []
+
+        idx_iter += 1
 
     return root
 

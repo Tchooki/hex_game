@@ -21,10 +21,18 @@ class HexBoard:
         -1: (0, 0, 0),
     }
 
-    def __init__(self, n=11) -> None:
+    def __init__(
+        self,
+        n=11,
+        model=None,
+        ai_color=None,
+        time_limit=1.0,
+        temperature=1.0,
+        temp_threshold=10,
+    ) -> None:
         pygame.init()
         self.n = n
-        self.mode = "basic"
+        self.mode: Literal["random", "basic", "training", "ai"] = "basic"
         self.screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
         pygame.display.set_caption("Jeu de Hex")
         self.clock = pygame.time.Clock()
@@ -42,6 +50,15 @@ class HexBoard:
         self.hover_index: tuple[int, int] | None = None
         self.turn = WHITE
         self.quit = False
+
+        # AI settings
+        self.model = model
+        self.ai_color = ai_color
+        self.time_limit = time_limit
+        self.init_temperature = temperature
+        self.temp_threshold = temp_threshold
+        self.move_count = 0
+
         self.update_window()
 
     def handle_events(self):
@@ -61,6 +78,7 @@ class HexBoard:
                     if self.board.can_play(index):
                         self.pawn_dict[index] = self.board.turn
                         self.board.play(index)
+                        self.move_count += 1
 
     def computer_move(self):
         """Move from computer of AI"""
@@ -77,14 +95,45 @@ class HexBoard:
                 if isinstance(action, int):
                     self.pawn_dict[action] = self.board.turn
                     self.board.play(action)
-                elif pos == "reset":
+                    self.move_count += 1
+                elif action == "reset":
                     self.reset()
+        elif self.mode == "ai" and self.board.has_won == 0:
+            if self.board.turn == self.ai_color:
+                from hex_game.ai.mcts import MCTS, RootNode
+
+                # MCTS
+                root = RootNode(self.board)
+                MCTS(root, self.model, time_limit=self.time_limit, n_iter=None)
+
+                # Pi
+                pi = root.children_N
+
+                # Temperature
+                temp = (
+                    self.init_temperature
+                    if self.move_count < self.temp_threshold
+                    else 0.1
+                )
+
+                if temp <= 0.1:
+                    action = int(np.argmax(pi))
+                else:
+                    # pi = pi**(1/temp) / sum(pi**(1/temp))
+                    pi_temp = pi ** (1 / temp)
+                    pi_temp /= np.sum(pi_temp)
+                    action = int(np.random.choice(len(pi), p=pi_temp))
+
+                self.pawn_dict[action] = self.board.turn
+                self.board.play(action)
+                self.move_count += 1
 
     def reset(self):
         """Reset board"""
         self.turn = WHITE
         self.board.reset()
         self.pawn_dict = OrderedDict()
+        self.move_count = 0
 
     def update_window(self, safey: float = 0.12, safex: float = 0.02):
         """
@@ -405,7 +454,7 @@ class HexBoard:
     def run(
         self,
         debug=False,
-        mode: Literal["random", "basic", "training"] = "basic",
+        mode: Literal["random", "basic", "training", "ai"] = "basic",
         move_queue: queue.Queue | None = None,
     ):
         """Run main pygame loop"""
