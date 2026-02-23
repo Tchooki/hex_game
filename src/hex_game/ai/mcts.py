@@ -13,7 +13,8 @@ import numpy as np
 import torch
 
 from hex_game.game.board import Board
-from hex_game.ui.display import HexBoard
+from hex_game.ui.board_view import HexBoard
+from hex_game.ui.players import QueuePlayer
 
 if TYPE_CHECKING:
     # import torch.nn as nn
@@ -456,10 +457,11 @@ def generate_data(
     if show:
         move_queue = queue.Queue()
         threading.Thread(
-            target=lambda: HexBoard(model.n).run(
-                mode="training",
-                move_queue=move_queue,
-            ),
+            target=lambda: HexBoard(
+                n=model.n,
+                player_white=QueuePlayer(move_queue),
+                player_black=QueuePlayer(move_queue),
+            ).run(),
             daemon=True,
         ).start()
 

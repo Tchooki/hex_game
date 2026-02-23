@@ -6,7 +6,8 @@ from pathlib import Path
 import torch
 
 from hex_game.ai.model import HexNet
-from hex_game.ui.display import HexBoard
+from hex_game.ui.board_view import HexBoard
+from hex_game.ui.players import AIPlayer, HumanPlayer
 
 
 def play_ai(run_name: str, n: int = 11, time_limit: float = 1.0):
@@ -26,12 +27,14 @@ def play_ai(run_name: str, n: int = 11, time_limit: float = 1.0):
     # Computer plays as BLACK (second player) by default
     game = HexBoard(
         n=n,
-        model=model,
-        ai_color=-1,  # BLACK
-        time_limit=time_limit,
-        temperature=1.0,
+        player_white=HumanPlayer(),
+        player_black=AIPlayer(
+            model=model,
+            time_limit=time_limit,
+            temperature=1.0,
+        ),
     )
-    game.run(mode="ai")
+    game.run()
 
 
 def main():
@@ -56,8 +59,12 @@ def main():
     elif args.ai:
         play_ai(args.run, n=args.size, time_limit=args.time)
     else:
-        # Default: basic play
-        HexBoard(n=args.size).run(mode="basic")
+        # Default: basic play (Human vs Human)
+        HexBoard(
+            n=args.size,
+            player_white=HumanPlayer(),
+            player_black=HumanPlayer(),
+        ).run()
 
 
 if __name__ == "__main__":
