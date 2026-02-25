@@ -176,9 +176,6 @@ class HexBoard:
         n_arc = 10
         # PART black
         points = get_arc_points(center_top_left, self.radius, -pi, -5 * pi / 6, n_arc)
-        # points = []
-        # for angle in np.linspace(-pi / 6, pi / 6, n_arc): # Wait, logic in display.py was a bit weird
-        # Let's replicate EXACTLY the display.py logic first to avoid breaking UI
         points = []
         for angle in np.linspace(-pi / 6, pi / 6, n_arc):
             points.append(
