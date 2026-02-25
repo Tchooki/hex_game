@@ -3,8 +3,6 @@ from __future__ import annotations
 import queue
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from hex_game.game.board import Board
 
 if TYPE_CHECKING:
@@ -58,18 +56,8 @@ class AIPlayer(BasePlayer):
         root = RootNode(board)
         MCTS(root, self.model, time_limit=self.time_limit, n_iter=None)
 
-        # Pi
-        pi = root.children_N
-
-        # Temperature
         temp = self.temperature if move_count < self.temp_threshold else 0.1
-
-        if temp <= 0.1:
-            action = int(np.argmax(pi))
-        else:
-            pi_temp = pi ** (1 / temp)
-            pi_temp /= np.sum(pi_temp)
-            action = int(np.random.choice(len(pi), p=pi_temp))
+        action = root.sample_action(temp)
 
         return action
 

@@ -33,7 +33,7 @@ class RootNode:
         self.action: int | None = None
         self.parent: RootNode | None = None
         self.is_expanded: bool = False
-        self.state: Board = deepcopy(state)
+        self.state: Board = state  # .light_copy()
         self.possible_actions: list[int] = self.state.actions()
         self.children: dict[int, Node] = {}
 
@@ -207,7 +207,7 @@ class RootNode:
 
     def best_child(self) -> Node:
         """Return best child according to Q + U"""
-        if self.need_update_U:
+        if self.need_update_U:  # Lazy update
             self.update_children_U()
             self.need_update_U = False
 
@@ -416,6 +416,46 @@ def MCTS(
     return root
 
 
+def MCTS_multi(
+    roots: list[RootNode],
+    model: HexNet,
+    n_iter: int = 100,
+) -> None:
+    """
+    Perform MCTS on multiple roots in parallel (vectorized).
+
+    Args:
+        roots (list[RootNode]): List of RootNodes to expand
+        model (HexNet): model
+        n_iter (int): Number of iterations
+    """
+    # Filter roots that are already finished (safety)
+    active_roots = [r for r in roots if r.state.has_won == 0]
+    if not active_roots:
+        return
+
+    # First Root eval for those not expanded
+    to_expand = [r for r in active_roots if not r.is_expanded]
+    if to_expand:
+        probas, values = perform_model(model, to_expand)
+        for i, root in enumerate(to_expand):
+            root.expand(probas[i])
+            root.backup(values[i].item())
+
+    for _ in range(n_iter):
+        # 1. Select a leaf for each active root
+        leaves = [root.select() for root in active_roots]
+
+        # 2. Batch evaluate all leaves
+        probas, values = perform_model(model, leaves)
+
+        # 3. Expand and backup
+        for i, leaf in enumerate(leaves):
+            if leaf.state.has_won == 0:
+                leaf.expand(probas[i])
+            leaf.backup(values[i].item())
+
+
 def generate_data(
     model: HexNet,
     n_games: int,
@@ -425,35 +465,48 @@ def generate_data(
     save_path: str | None = None,
     temperature: float = 1.0,
     temperature_threshold: int = 15,
+    batch_size: int = 16,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Generate data for training according to model.
+    Generate data for training according to model using parallel games.
 
     Args:
         model (HexNet): model that predict
         n_games (int): number of games generated
         n_random_plays (int, optional): first plays that are chosen randomly.
-                                        Defaults to 1.
-        n_iter (int, optional): number of iteration in MCTS. Defaults to 10.
-        show (bool, optional): Show with pygame the generation of data.
-                            Defaults to False.
-        save_path (str, optional): Path to save data in compressed format.
-                            If None, data is not saved. Defaults to None.
-        temperature (float, optional): Temperature for move selection. Defaults to 1.0.
-        temperature_threshold (int, optional): Number of moves after which
-                            temperature → 0. Defaults to 15.
+        n_iter (int, optional): number of iteration in MCTS.
+        show (bool, optional): Show with pygame (only for batch_size=1).
+        save_path (str, optional): Path to save data.
+        temperature (float, optional): Temperature for move selection.
+        temperature_threshold (int, optional): Move count threshold for temp -> 0.
+        batch_size (int, optional): Number of parallel games.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values for training
-
+        tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values
     """
     boards: list[np.ndarray] = []
     policies: list[np.ndarray] = []
-    values: list[float] = []
+    values_list: list[float] = []
+
+    # Current state of each parallel game
+    class GameState:
+        def __init__(self):
+            self.board = Board(model.n)
+            self.reset()
+
+        def reset(self):
+            self.board.reset()
+            for _ in range(n_random_plays):
+                self.board.play_random()
+            self.root = RootNode(self.board)
+            self.history = []
+            self.move_count = 0
+
+    if show and batch_size > 1:
+        print("Warning: show=True is only supported for batch_size=1. Disabling show.")
+        show = False
+
     move_queue: queue.Queue | None = None
-
-    b = Board(model.n)
-
     if show:
         move_queue = queue.Queue()
         threading.Thread(
@@ -465,63 +518,69 @@ def generate_data(
             daemon=True,
         ).start()
 
-    for _game_idx in range(n_games):
-        b.reset()
-        if show and move_queue is not None:
-            move_queue.put_nowait("reset")
-        for _ in range(n_random_plays):
-            pos, _ = b.play_random()
-            if show and move_queue is not None:
-                move_queue.put_nowait(pos)
-        root = RootNode(b)
-        current = root
-        game_history = []  # Store (node, state) for this game
-        move_count = 0
+    active_games: list[GameState] = []
+    finished_games = 0
+    started_games = 0
 
-        while current.state.has_won == 0:
-            MCTS(current, model, n_iter=n_iter)
-            game_history.append(current)
+    while finished_games < n_games:
+        # 1. Fill active games up to batch_size
+        while len(active_games) < batch_size and started_games < n_games:
+            game = GameState()
+            active_games.append(game)
+            started_games += 1
+            if show and move_queue:
+                # Replicate initial random moves in UI
+                move_queue.put_nowait("reset")
+                # Note: this is a bit simplified, ideally we'd pass all random moves
+                # but for simplicity we just show the board after random plays
+                # or we could record them.
 
-            # Use temperature-based selection early, then switch to best move
-            tau = temperature if move_count < temperature_threshold else 0
-            current = current.sample_child(temperature=tau)
+        if not active_games:
+            break
 
-            move_count += 1
-            if show and move_queue is not None and current.action is not None:
-                move_queue.put_nowait(current.action)
+        # 2. Run MCTS on all active games in one batch
+        MCTS_multi([g.root for g in active_games], model, n_iter=n_iter)
 
-        # Game finished, get the winner
-        won = current.state.has_won
+        # 3. Sample and play actions for each game
+        to_remove = []
+        for game in active_games:
+            game.history.append(game.root)
 
-        # Add the final position
-        game_history.append(current)
+            # Sample action
+            tau = temperature if game.move_count < temperature_threshold else 0.1
+            game.root = game.root.sample_child(temperature=tau)
+            game.move_count += 1
 
-        # Collect training data from this game (skip terminal state)
-        for node in game_history[:-1]:
-            boards.append(node.state.to_numpy())
+            if show and move_queue and game.root.action is not None:
+                move_queue.put_nowait(game.root.action)
 
-            # Use improved policy from MCTS (based on visit counts)
-            policies.append(node.get_policy())
+            # 4. Check if game is finished
+            if game.root.state.has_won != 0:
+                won = game.root.state.has_won
+                # Collect data from history
+                for node in game.history:
+                    boards.append(node.state.to_numpy())
+                    policies.append(node.get_policy())
+                    values_list.append(won * node.state.turn)
 
-            # Value target is the game outcome from current player's perspective
-            value_target = won * node.state.turn
-            values.append(value_target)
+                finished_games += 1
+                to_remove.append(game)
+                if finished_games % 10 == 0:
+                    print(f"Games finished: {finished_games}/{n_games}")
 
-    # Convert lists to numpy arrays
+        # Remove finished games
+        for game in to_remove:
+            active_games.remove(game)
+
+    # Convert to numpy
     boards_array = np.array(boards, dtype=np.float32)
     policies_array = np.array(policies, dtype=np.float32)
-    values_array = np.array(values, dtype=np.float32)
+    values_array = np.array(values_list, dtype=np.float32)
 
-    # Save to disk if path is provided
-    if save_path is not None:
-        # Create data directory if it doesn't exist
+    if save_path:
         pathlib.Path(save_path).mkdir(exist_ok=True, parents=True)
-
-        # Generate filename with timestamp
         timestamp = int(time.time())
         filename = pathlib.Path(save_path) / f"selfplay_data_{timestamp}.npz"
-
-        # Save in compressed format
         np.savez_compressed(
             filename,
             boards=boards_array,
@@ -531,6 +590,5 @@ def generate_data(
             n_iter=n_iter,
         )
         print(f"Data saved to {filename}")
-        print(f"Total positions: {len(boards_array)}")
 
     return boards_array, policies_array, values_array

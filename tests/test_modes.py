@@ -26,13 +26,15 @@ def test_ai_player_get_move(mock_root_node, mock_mcts):
     player = AIPlayer(model, time_limit=0.1)
     board = MagicMock()
 
-    # Mock RootNode and its children_N attribute
+    # Mock RootNode and its sample_action method
     mock_root = MagicMock()
-    mock_root.children_N = [10, 20, 30]  # Action 2 has most visits
+    mock_root.sample_action.return_value = 2
     mock_root_node.return_value = mock_root
 
-    # Temperature 0.1 (greedy)
+    # Verify the move
     assert player.get_move(board, move_count=20) == 2
+    # Verify sample_action was called with the correct temperature (0.1 for move_count >= 10)
+    mock_root.sample_action.assert_called_once_with(0.1)
 
 
 @patch("hex_game.main.HexBoard")
