@@ -12,7 +12,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["mypy>=1.19.1", "pytest>=9.0.2", "types-networkx>=3.6.1.20260210"]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.4",
+    "types-networkx>=3.6.1.20260210",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -25,25 +30,6 @@ hex-train = "hex_game.ai.train:train"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.ruff]
-# Configuration du projet
-line-length = 88
-target-version = "py312"
-
-[tool.ruff.lint]
-# On active les règles de nommage (N) mais on ignore celles qui bloquent les majuscules 
-# pour les variables locales et les arguments (pratique en IA/Maths)
-select = ["E", "F", "N", "B"]
-ignore = [
-    "N806", # Variable in function should be lower case (ex: N, P, Q)
-    "N803", # Argument name should be lower case
-    "N802", # Function name should be lower case
-    "N812", # Import function name should be lower case
-]
-
-[tool.ruff.lint.pep8-naming]
-# On peut aussi lister les noms spécifiquement autorisés ici si on ne veut pas tout ignorer
-ignore-names = ["N", "P", "Q", "V", "U"]
 
 [tool.mypy]
 python_version = "3.12"

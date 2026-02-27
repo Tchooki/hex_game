@@ -4,7 +4,7 @@ test:
 	uv run pytest tests
 
 lint:
-	uv run ruff check .
+	uv run ruff check . --config ruff.toml
 
 mypy:
 	uv run mypy src
