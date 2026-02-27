@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
-from torch.utils.tensorboard import SummaryWriter
 
 from hex_game.ai.mcts import generate_data
 from hex_game.ai.model import HexNet
@@ -90,8 +89,6 @@ def train_epoch(
     policy_loss_fn: nn.Module,
     value_loss_fn: nn.Module,
     device: torch.device,
-    writer: SummaryWriter | None = None,
-    global_step: int = 0,
 ) -> tuple[float, float, float]:
     """Train the model for one epoch."""
     model.train()
@@ -99,7 +96,7 @@ def train_epoch(
     total_loss_p = 0.0
     total_loss_v = 0.0
 
-    for i, (boards, policies, values) in enumerate(loader):
+    for boards, policies, values in loader:
         boards, policies, values = (
             boards.to(device),
             policies.to(device),
@@ -122,12 +119,6 @@ def train_epoch(
         total_loss_p += loss_p.item()
         total_loss_v += loss_v.item()
 
-        if writer:
-            step = global_step + i
-            writer.add_scalar("Batch/Loss_Total", loss.item(), step)
-            writer.add_scalar("Batch/Loss_Policy", loss_p.item(), step)
-            writer.add_scalar("Batch/Loss_Value", loss_v.item(), step)
-
     avg_loss = total_loss / len(loader)
     avg_loss_p = total_loss_p / len(loader)
     avg_loss_v = total_loss_v / len(loader)
@@ -147,7 +138,6 @@ def train(
     lr: float = 1e-3,
     data_dir: str = "data",
     models_dir: str = "models",
-    log_dir: str = "logs",
 ):
     """Main training loop."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -157,10 +147,6 @@ def train(
     run_models_dir = Path(models_dir) / run_name
     run_models_dir.mkdir(parents=True, exist_ok=True)
     best_model_path = run_models_dir / "best_model.pth"
-
-    run_log_dir = Path(log_dir) / run_name
-    writer = SummaryWriter(log_dir=str(run_log_dir))
-    print(f"TensorBoard logs saved in {run_log_dir}")
 
     # Initialize model
     model = HexNet(n=n, n_res_block=n_res_block).to(device)
@@ -208,8 +194,6 @@ def train(
                 policy_loss_fn,
                 value_loss_fn,
                 device,
-                writer=writer,
-                global_step=gen_id * n_epochs * len(loader) + total_steps_this_gen,
             )
             total_steps_this_gen += len(loader)
 
@@ -218,21 +202,10 @@ def train(
                 f"(P: {avg_p:.4f}, V: {avg_v:.4f})"
             )
 
-            # Log epoch metrics
-            epoch_step = (gen_id - 1) * n_epochs + epoch
-            writer.add_scalar("Epoch/Loss_Total", avg_loss, epoch_step)
-            writer.add_scalar("Epoch/Loss_Policy", avg_p, epoch_step)
-            writer.add_scalar("Epoch/Loss_Value", avg_v, epoch_step)
-
-        # Log generation metrics
-        writer.add_scalar("Gen/Loss_Total", avg_loss, gen_id)
-
         model_path = run_models_dir / f"model_{gen_id}.pth"
         torch.save(model.state_dict(), model_path)
         torch.save(model.state_dict(), best_model_path)
         print(f"Model saved as {model_path} and updated best_model.pth")
-
-    writer.close()
 
 
 if __name__ == "__main__":

@@ -66,14 +66,5 @@ The project includes a `Makefile` for common development tasks:
 - `tests/`: Automated tests.
 - `models/`: Stored model checkpoints.
 - `data/`: Generated gameplay data for training.
-- `logs/`: TensorBoard training logs.
 
-## 📊 Monitoring with TensorBoard
 
-You can monitor training progress (losses) using TensorBoard:
-
-```bash
-uv run tensorboard --logdir logs
-```
-
-Then open your browser at [http://localhost:6006](http://localhost:6006).
