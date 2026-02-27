@@ -5,7 +5,8 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from copy import deepcopy
+
+# from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import networkx as nx

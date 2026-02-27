@@ -1,8 +1,3 @@
-from pathlib import Path
-
-import numpy as np
-import pytest
-
 from hex_game.ai.mcts import generate_data
 
 from .test_generate_data import MockModel

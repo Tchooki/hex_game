@@ -33,7 +33,8 @@ def test_ai_player_get_move(mock_root_node, mock_mcts):
 
     # Verify the move
     assert player.get_move(board, move_count=20) == 2
-    # Verify sample_action was called with the correct temperature (0.1 for move_count >= 10)
+    # Verify sample_action was called with the correct temperature
+    #   (0.1 for move_count >= 10)
     mock_root.sample_action.assert_called_once_with(0.1)
 
 
