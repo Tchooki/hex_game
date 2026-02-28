@@ -18,8 +18,6 @@ from hex_game.ui.board_view import HexBoard
 from hex_game.ui.players import QueuePlayer
 
 if TYPE_CHECKING:
-    # import torch.nn as nn
-
     from hex_game.ai.model import HexNet
 
 
@@ -87,20 +85,20 @@ class RootNode:
         self.sum_V_root = value
 
     @property
-    def Q(self):
-        """Action value"""
+    def Q(self) -> float:
+        """Action value."""
         return self.sum_V / self.N if self.N != 0 else 0
 
-    def update_children_Q(self, action):
-        """Update children Q"""
+    def update_children_Q(self, action: int) -> None:
+        """Update children Q."""
         if self.allow_update and self.children_N[action] > 0:
             self._children_Q[action] = (
                 self.children_sum_V[action] / self.children_N[action]
             )
 
     @property
-    def children_Q(self):
-        """Action values"""
+    def children_Q(self) -> np.ndarray:
+        """Action values."""
         return self._children_Q
 
     def update_children_U(self, c: float = 1.0) -> None:
@@ -170,8 +168,8 @@ class RootNode:
         action = RNG.choice(self.state.action_space, p=policy)
         return action
 
-    def expand(self, proba_model: np.ndarray):
-        """Expand node"""
+    def expand(self, proba_model: np.ndarray) -> None:
+        """Expand node."""
         self.is_expanded = True
         actions = self.state.actions()
 
@@ -183,15 +181,15 @@ class RootNode:
         self.children_P = np.asarray(proba_model)
         self.update_children_U()
 
-    def select(self):
-        """Select leaf node according to Q + U"""
+    def select(self) -> RootNode:
+        """Select leaf node according to Q + U."""
         current = self
         while current.is_expanded:
             current = current.best_child()
         return current
 
-    def backup(self, value: float):
-        """Update V N recursively"""
+    def backup(self, value: float) -> None:
+        """Update V N recursively."""
         current = self
         while isinstance(current, Node):
             current.allow_update = False
@@ -199,6 +197,7 @@ class RootNode:
             current.sum_V += value
             value = -value  # Negate value as we go up (players alternate)
             assert current.parent is not None
+            assert current.action is not None
             current.parent.update_children_Q(current.action)
             current.parent.need_update_U = True
             current.allow_update = True
@@ -207,7 +206,7 @@ class RootNode:
         current.sum_V += value
 
     def best_child(self) -> Node:
-        """Return best child according to Q + U"""
+        """Return best child according to Q + U."""
         if self.need_update_U:  # Lazy update
             self.update_children_U()
             self.need_update_U = False
@@ -253,20 +252,23 @@ class RootNode:
 
 
 class Node(RootNode):
+    action: int
+    parent: RootNode
+
     def __init__(self, state: Board, parent: RootNode, action: int) -> None:
         super().__init__(state)
         self.action = action
         self.parent = parent
 
     @property
-    def N(self):
-        """Number of visit getter"""
+    def N(self) -> int:
+        """Number of visit getter."""
         assert self.parent is not None
         return self.parent.children_N[self.action]
 
     @N.setter
-    def N(self, value):
-        """Number of visit setter"""
+    def N(self, value: int) -> None:
+        """Number of visit setter."""
         assert self.parent is not None
         self.parent.sum_children_N += value - self.parent.children_N[self.action]
         self.parent.children_N[self.action] = value
@@ -275,13 +277,13 @@ class Node(RootNode):
             self.parent.need_update_U = True
 
     @property
-    def sum_V(self):
+    def sum_V(self) -> float:
         """Sum of values getter."""
         assert self.parent is not None
         return self.parent.children_sum_V[self.action]
 
     @sum_V.setter
-    def sum_V(self, value):
+    def sum_V(self, value: float) -> None:
         """Sum of values setter."""
         assert self.parent is not None
         self.parent.children_sum_V[self.action] = value
@@ -363,6 +365,7 @@ def MCTS(
 
     Returns:
         RootNode: the tree created
+
     """
     # First Root eval
     probas, values = perform_model(model, [root])
@@ -398,19 +401,20 @@ def MCTS(
             and (time.perf_counter() - global_start_time) >= time_limit
         )
 
-        if reached_batch or batch_timeout or last_iter or search_timeout:
-            if len(batch_leaves) > 0:
-                # predict with model
-                probas, values = perform_model(model, batch_leaves)
-                # Expand & backup
-                for j, (proba, value) in enumerate(zip(probas, values, strict=True)):
-                    batch_leaves[j].sum_V += 10  # Restore virtual loss
-                    if batch_leaves[j].state.has_won == 0:
-                        batch_leaves[j].expand(proba)
-                    # Update V N
-                    batch_leaves[j].backup(value)
-                batch_start_time = time.perf_counter()
-                batch_leaves = []
+        if len(batch_leaves) > 0 and (
+            reached_batch or batch_timeout or last_iter or search_timeout
+        ):
+            # predict with model
+            probas, values = perform_model(model, batch_leaves)
+            # Expand & backup
+            for j, (proba, value) in enumerate(zip(probas, values, strict=True)):
+                batch_leaves[j].sum_V += 10  # Restore virtual loss
+                if batch_leaves[j].state.has_won == 0:
+                    batch_leaves[j].expand(proba)
+                # Update V N
+                batch_leaves[j].backup(value)
+            batch_start_time = time.perf_counter()
+            batch_leaves = []
 
         idx_iter += 1
 
@@ -429,6 +433,7 @@ def MCTS_multi(
         roots (list[RootNode]): List of RootNodes to expand
         model (HexNet): model
         n_iter (int): Number of iterations
+
     """
     # Filter roots that are already finished (safety)
     active_roots = [r for r in roots if r.state.has_won == 0]
@@ -484,6 +489,7 @@ def generate_data(
 
     Returns:
         tuple[np.ndarray, np.ndarray, np.ndarray]: boards, policies, values
+
     """
     boards: list[np.ndarray] = []
     policies: list[np.ndarray] = []
@@ -491,16 +497,16 @@ def generate_data(
 
     # Current state of each parallel game
     class GameState:
-        def __init__(self):
+        def __init__(self) -> None:
             self.board = Board(model.n)
             self.reset()
 
-        def reset(self):
+        def reset(self) -> None:
             self.board.reset()
             for _ in range(n_random_plays):
                 self.board.play_random()
             self.root = RootNode(self.board)
-            self.history = []
+            self.history: list = []
             self.move_count = 0
 
     if show and batch_size > 1:
@@ -530,11 +536,7 @@ def generate_data(
             active_games.append(game)
             started_games += 1
             if show and move_queue:
-                # Replicate initial random moves in UI
                 move_queue.put_nowait("reset")
-                # Note: this is a bit simplified, ideally we'd pass all random moves
-                # but for simplicity we just show the board after random plays
-                # or we could record them.
 
         if not active_games:
             break

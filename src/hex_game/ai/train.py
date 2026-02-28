@@ -12,15 +12,17 @@ from hex_game.ai.model import HexNet
 class HexDataset(Dataset):
     """Dataset for Hex game training data."""
 
-    def __init__(self, boards: np.ndarray, policies: np.ndarray, values: np.ndarray):
+    def __init__(
+        self, boards: np.ndarray, policies: np.ndarray, values: np.ndarray
+    ) -> None:
         self.boards = torch.from_numpy(boards).unsqueeze(1).float()
         self.policies = torch.from_numpy(policies).float()
         self.values = torch.from_numpy(values).unsqueeze(1).float()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.boards)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.boards[idx], self.policies[idx], self.values[idx]
 
 
@@ -97,11 +99,9 @@ def train_epoch(
     total_loss_v = 0.0
 
     for boards, policies, values in loader:
-        boards, policies, values = (
-            boards.to(device),
-            policies.to(device),
-            values.to(device),
-        )
+        boards = boards.to(device)  # noqa: PLW2901
+        policies = policies.to(device)  # noqa: PLW2901
+        values = values.to(device)  # noqa: PLW2901
 
         optimizer.zero_grad()
         p_pred, v_pred = model(boards)
@@ -138,7 +138,7 @@ def train(
     lr: float = 1e-3,
     data_dir: str = "data",
     models_dir: str = "models",
-):
+) -> None:
     """Main training loop."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device} for run: {run_name}")

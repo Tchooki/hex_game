@@ -6,11 +6,15 @@ from torch import nn
 
 
 class ResBlock(nn.Module):
-    def __init__(self, channels, hidden_channels=128) -> None:
+    def __init__(self, channels: int, hidden_channels: int = 128) -> None:
         super().__init__()
 
         self.conv1 = nn.Conv2d(
-            channels, hidden_channels, kernel_size=3, padding_mode="zeros", padding=1,
+            channels,
+            hidden_channels,
+            kernel_size=3,
+            padding_mode="zeros",
+            padding=1,
         )
         self.bn1 = nn.BatchNorm2d(hidden_channels)
         self.conv2 = nn.Conv2d(
@@ -22,17 +26,17 @@ class ResBlock(nn.Module):
         )
         self.bn2 = nn.BatchNorm2d(hidden_channels)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip = x
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
-        out = out + skip
+        out += skip
         out = F.relu(out)
         return out
 
 
 class HexNet(nn.Module):
-    def __init__(self, n=11, n_res_block=10) -> None:
+    def __init__(self, n: int = 11, n_res_block: int = 10) -> None:
         super().__init__()
         self.n = n
 
@@ -49,7 +53,7 @@ class HexNet(nn.Module):
         self.value_fc1 = nn.Linear(1 * self.n * self.n, 128)
         self.value_fc2 = nn.Linear(128, 1)
 
-    def forward(self, x) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # x (batch, 1, self.n, self.n)
         x = self.input_block(x)
 

@@ -63,9 +63,11 @@ extend-select = [
     "FURB", # Refurb
     "RUF",  # Ruff-specific rules
 ]
-pylint.max-args = 10
-mccabe.max-complexity = 15
+pylint.max-args = 12
+pylint.max-locals = 16
+mccabe.max-complexity = 17
 pylint.max-branches = 14
+pylint.max-statements = 60
 
 ignore = [
     "E501",    # Pycodestyle - line too long
@@ -83,11 +85,13 @@ ignore = [
     "TC002",   # Flake8-type-checking
     "TC003",   # Flake8-type-checking
     # Règles ignorées spécifiquement pour ce projet (IA/Maths)
-    "N806",   # Variable in function should be lower case
-    "N803",   # Argument name should be lower case
-    "N802",   # Function name should be lower case
-    "N812",   # Import function name should be lower case
-    "COM812", # Trailing comma missing
+    "N806",    # Variable in function should be lower case
+    "N803",    # Argument name should be lower case
+    "N802",    # Function name should be lower case
+    "N812",    # Import function name should be lower case
+    "COM812",  # Trailing comma missing
+    "PLR2004", # Magic value used in comparison
+    "S101",    # Use of `assert` detected
 ]
 
 [lint.pep8-naming]

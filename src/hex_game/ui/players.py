@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import queue
-from typing import TYPE_CHECKING
-
-from hex_game.game.board import Board
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from hex_game.ai.model import HexNet
+    from hex_game.game.board import Board
 
 
 class BasePlayer:
     """Base class for all players."""
 
-    def get_move(self, board: Board, **kwargs) -> int | str | None:
+    def get_move(self, board: Board, **kwargs: Any) -> int | str | None:  # noqa: ANN401
         """Return the next move or None if waiting for interaction."""
         raise NotImplementedError
 
@@ -20,14 +19,14 @@ class BasePlayer:
 class HumanPlayer(BasePlayer):
     """A human player that interacts via the GUI."""
 
-    def get_move(self, board: Board, **kwargs) -> int | None:
+    def get_move(self, board: Board, **kwargs: Any) -> int | None:  # noqa: ARG002, ANN401, PLR6301
         return None  # Move is handled by GUI events
 
 
 class RandomPlayer(BasePlayer):
     """A player that makes random moves."""
 
-    def get_move(self, board: Board, **kwargs) -> int:
+    def get_move(self, board: Board, **kwargs: Any) -> int:  # noqa: ARG002, ANN401, PLR6301
         pos, _ = board.play_random()
         return pos
 
@@ -41,14 +40,14 @@ class AIPlayer(BasePlayer):
         time_limit: float = 1.0,
         temperature: float = 1.0,
         temp_threshold: int = 10,
-    ):
+    ) -> None:
         self.model = model
         self.time_limit = time_limit
         self.temperature = temperature
         self.temp_threshold = temp_threshold
 
-    def get_move(self, board: Board, **kwargs) -> int:
-        from hex_game.ai.mcts import MCTS, RootNode
+    def get_move(self, board: Board, **kwargs: Any) -> int:  # noqa: ANN401
+        from hex_game.ai.mcts import MCTS, RootNode  # noqa: PLC0415
 
         move_count = kwargs.get("move_count", 0)
 
@@ -65,10 +64,10 @@ class AIPlayer(BasePlayer):
 class QueuePlayer(BasePlayer):
     """A player that gets moves from a queue (used for training visualization)."""
 
-    def __init__(self, move_queue: queue.Queue):
+    def __init__(self, move_queue: queue.Queue) -> None:
         self.move_queue = move_queue
 
-    def get_move(self, board: Board, **kwargs) -> int | str | None:
+    def get_move(self, board: Board, **kwargs: Any) -> int | str | None:  # noqa: ARG002, ANN401
         if not self.move_queue.empty():
             action = self.move_queue.get_nowait()
             self.move_queue.task_done()

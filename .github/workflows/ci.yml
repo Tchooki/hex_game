@@ -28,7 +28,9 @@ jobs:
       run: make lint
 
     - name: Type checking
+      if: always()
       run: make mypy
       
     - name: Unit tests
+      if: always()
       run: make test

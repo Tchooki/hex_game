@@ -17,18 +17,18 @@ from hex_game.ui.hex_utils import (
 )
 from hex_game.ui.players import BasePlayer, HumanPlayer
 
+MAP_COLOR = {
+    1: (255, 255, 255),
+    -1: (0, 0, 0),
+}
+
 
 class HexBoard:
-    """Print 2D board"""
-
-    MAP_COLOR = {
-        1: (255, 255, 255),
-        -1: (0, 0, 0),
-    }
+    """Print 2D board."""
 
     def __init__(
         self,
-        n=11,
+        n: int = 11,
         player_white: BasePlayer | None = None,
         player_black: BasePlayer | None = None,
     ) -> None:
@@ -71,8 +71,8 @@ class HexBoard:
 
         self.update_window()
 
-    def handle_events(self):
-        """Handle event"""
+    def handle_events(self) -> None:
+        """Handle event."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -82,19 +82,18 @@ class HexBoard:
                 )
             elif event.type == pygame.WINDOWRESIZED:
                 self.update_window()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if (
-                    isinstance(self.players[self.board.turn], HumanPlayer)
-                    and self.hover_index
-                ):
-                    i, j = self.hover_index
-                    index = i * self.n + j
-                    if self.board.can_play(index):
-                        self.pawn_dict[index] = self.board.turn
-                        self.board.play(index)
-                        self.move_count += 1
+            elif event.type == pygame.MOUSEBUTTONDOWN and (
+                isinstance(self.players[self.board.turn], HumanPlayer)
+                and self.hover_index
+            ):
+                i, j = self.hover_index
+                index = i * self.n + j
+                if self.board.can_play(index):
+                    self.pawn_dict[index] = self.board.turn
+                    self.board.play(index)
+                    self.move_count += 1
 
-    def computer_move(self):
+    def computer_move(self) -> None:
         """Request a move from the current player if it's not human."""
         if self.board.has_won != 0:
             return
@@ -114,15 +113,15 @@ class HexBoard:
             elif action == "reset":
                 self.reset()
 
-    def reset(self):
-        """Reset board"""
+    def reset(self) -> None:
+        """Reset board."""
         self.turn = WHITE
         self.board.reset()
         self.pawn_dict = OrderedDict()
         self.move_count = 0
 
-    def update_window(self, safey: float = 0.12, safex: float = 0.02):
-        """Update window settings and positions"""
+    def update_window(self, safey: float = 0.12, safex: float = 0.02) -> None:
+        """Update window settings and positions."""
         width, height = self.screen.get_width(), self.screen.get_height()
         layout = calculate_diamond_layout(width, height, self.n, safey, safex)
 
@@ -149,8 +148,8 @@ class HexBoard:
                     self.center[1] + (t_j - 1 / 2) * self.diamond_height,
                 )
 
-    def _draw_bg(self):
-        """Draw background diamond"""
+    def _draw_bg(self) -> None:
+        """Draw background diamond."""
         self.screen.fill((254, 194, 31))
 
         adjacent30 = self.radius / tan(pi / 6)
@@ -239,7 +238,7 @@ class HexBoard:
             )
         pygame.gfxdraw.filled_polygon(self.screen, points, (255, 255, 255))
 
-    def _draw_text(self):
+    def _draw_text(self) -> None:
         font = pygame.font.SysFont(
             "Liberation Serif",
             int(self.diamond_height / (1.5 * self.n)),
@@ -267,8 +266,9 @@ class HexBoard:
             text_rect = digits[i].get_rect(right=pos[0], centery=pos[1])
             self.screen.blit(digits[i], text_rect)
 
+    @staticmethod
     def _render_labels(
-        self, font: pygame.font.Font, n: int
+        font: pygame.font.Font, n: int
     ) -> tuple[list[Surface], list[Surface]]:
         ord_a = ord("A")
         letters, numbers = [], []
@@ -279,8 +279,8 @@ class HexBoard:
             numbers.append(num)
         return letters, numbers
 
-    def _draw_hex(self):
-        """Draw hexagones"""
+    def _draw_hex(self) -> None:
+        """Draw hexagones."""
         for i in range(self.n):
             for j in range(self.n):
                 coords = self.hex_pos[i][j]
@@ -288,7 +288,7 @@ class HexBoard:
                 pygame.draw.polygon(self.screen, (0, 0, 0), points)
                 pygame.draw.polygon(self.screen, (241, 219, 170), points_inside)
 
-    def _draw_debug(self):
+    def _draw_debug(self) -> None:
         font = pygame.font.SysFont(
             "Liberation Serif",
             int(self.diamond_height / (2 * self.n)),
@@ -301,36 +301,35 @@ class HexBoard:
                 text_rect = num.get_rect(center=self.hex_pos[i][j])
                 self.screen.blit(num, text_rect)
 
-    def _draw_pawn(self):
-        """Draw pawns"""
-        if self.can_play:
-            if self.hover_index:
-                time_s = pygame.time.get_ticks() / 100
-                alpha = (1 + sin(time_s)) / 2
-                color = (
-                    (30, 30, 30, int(32 * alpha) + 64)
-                    if self.board.turn == BLACK
-                    else (255, 255, 255, int(64 * alpha) + 96)
-                )
+    def _draw_pawn(self) -> None:
+        """Draw pawns."""
+        if self.can_play and self.hover_index:
+            time_s = pygame.time.get_ticks() / 100
+            alpha = (1 + sin(time_s)) / 2
+            color = (
+                (30, 30, 30, int(32 * alpha) + 64)
+                if self.board.turn == BLACK
+                else (255, 255, 255, int(64 * alpha) + 96)
+            )
 
-                i, j = self.hover_index
-                diam = self.hex_radius * 2
-                circle_surf = pygame.Surface((int(diam), int(diam)), pygame.SRCALPHA)
-                pygame.draw.circle(
-                    circle_surf,
-                    color,
-                    (int(diam // 2), int(diam // 2)),
-                    int(self.hex_radius / 1.5),
-                )
-                pos_draw = (
-                    self.hex_pos[i][j][0] - diam // 2,
-                    self.hex_pos[i][j][1] - diam // 2,
-                )
-                self.screen.blit(circle_surf, pos_draw)
+            i, j = self.hover_index
+            diam = self.hex_radius * 2
+            circle_surf = pygame.Surface((int(diam), int(diam)), pygame.SRCALPHA)
+            pygame.draw.circle(
+                circle_surf,
+                color,
+                (int(diam // 2), int(diam // 2)),
+                int(self.hex_radius / 1.5),
+            )
+            pos_draw = (
+                self.hex_pos[i][j][0] - diam // 2,
+                self.hex_pos[i][j][1] - diam // 2,
+            )
+            self.screen.blit(circle_surf, pos_draw)
 
         # Draw pawns
         for index, turn in self.pawn_dict.items():
-            pawn_color = self.MAP_COLOR[turn]
+            pawn_color = MAP_COLOR[turn]
             i, j = divmod(index, self.n)
             pygame.draw.circle(
                 self.screen,
@@ -339,8 +338,8 @@ class HexBoard:
                 self.hex_radius / 1.5,
             )
 
-    def draw_board(self, debug=False):
-        """Draw board"""
+    def draw_board(self, debug: bool = False) -> None:
+        """Draw board."""
         self._draw_bg()
         self._draw_text()
         self._draw_hex()
@@ -348,12 +347,12 @@ class HexBoard:
         if debug:
             self._draw_debug()
 
-    def draw(self, debug=False):
-        """Draw graphics"""
+    def draw(self, debug: bool = False) -> None:
+        """Draw graphics."""
         self.draw_board(debug=debug)
 
-    def run(self, debug=False):
-        """Run main pygame loop"""
+    def run(self, debug: bool = False) -> None:
+        """Run main pygame loop."""
         # Main Loop
         while self.running:
             self.computer_move()

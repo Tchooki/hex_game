@@ -7,11 +7,12 @@ import pytest
 import torch
 
 from hex_game.ai.mcts import generate_data
+from hex_game.ai.model import HexNet
 
 
-class MockModel:
+class MockModel(HexNet):
     def __init__(self, n: int = 11):
-        self.n = n
+        super().__init__(n=n, n_res_block=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = x.shape[0]

@@ -23,8 +23,6 @@ def test_generate_data_odd_batch():
     n_games = 3
 
     # Test with batch_size = 2 (should handle 2 games then 1 game)
-    boards, policies, values = generate_data(
-        model, n_games=n_games, batch_size=2, n_iter=2
-    )
+    boards, _, _ = generate_data(model, n_games=n_games, batch_size=2, n_iter=2)
 
     assert len(boards) >= n_games
