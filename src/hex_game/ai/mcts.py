@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 
 # from copy import deepcopy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import networkx as nx
 import numpy as np
@@ -462,7 +462,7 @@ def MCTS_multi(
             leaf.backup(values[i].item())
 
 
-def generate_data(
+def generate_data(  # noqa: PLR0914
     model: HexNet,
     n_games: int,
     n_random_plays: int = 1,
@@ -495,20 +495,6 @@ def generate_data(
     policies: list[np.ndarray] = []
     values_list: list[float] = []
 
-    # Current state of each parallel game
-    class GameState:
-        def __init__(self) -> None:
-            self.board = Board(model.n)
-            self.reset()
-
-        def reset(self) -> None:
-            self.board.reset()
-            for _ in range(n_random_plays):
-                self.board.play_random()
-            self.root = RootNode(self.board)
-            self.history: list = []
-            self.move_count = 0
-
     if show and batch_size > 1:
         print("Warning: show=True is only supported for batch_size=1. Disabling show.")
         show = False
@@ -525,14 +511,23 @@ def generate_data(
             daemon=True,
         ).start()
 
-    active_games: list[GameState] = []
+    # active_games holds dictionaries with keys: 'root', 'history', 'move_count'
+    active_games: list[dict[str, Any]] = []
     finished_games = 0
     started_games = 0
 
     while finished_games < n_games:
         # 1. Fill active games up to batch_size
         while len(active_games) < batch_size and started_games < n_games:
-            game = GameState()
+            board = Board(model.n)
+            for _ in range(n_random_plays):
+                board.play_random()
+
+            game: dict[str, Any] = {
+                "root": RootNode(board),
+                "history": [],
+                "move_count": 0,
+            }
             active_games.append(game)
             started_games += 1
             if show and move_queue:
@@ -542,26 +537,26 @@ def generate_data(
             break
 
         # 2. Run MCTS on all active games in one batch
-        MCTS_multi([g.root for g in active_games], model, n_iter=n_iter)
+        MCTS_multi([g["root"] for g in active_games], model, n_iter=n_iter)
 
         # 3. Sample and play actions for each game
         to_remove = []
         for game in active_games:
-            game.history.append(game.root)
+            game["history"].append(game["root"])
 
             # Sample action
-            tau = temperature if game.move_count < temperature_threshold else 0.1
-            game.root = game.root.sample_child(temperature=tau)
-            game.move_count += 1
+            tau = temperature if game["move_count"] < temperature_threshold else 0.1
+            game["root"] = game["root"].sample_child(temperature=tau)
+            game["move_count"] += 1
 
-            if show and move_queue and game.root.action is not None:
-                move_queue.put_nowait(game.root.action)
+            if show and move_queue and game["root"].action is not None:
+                move_queue.put_nowait(game["root"].action)
 
             # 4. Check if game is finished
-            if game.root.state.has_won != 0:
-                won = game.root.state.has_won
+            if game["root"].state.has_won != 0:
+                won = game["root"].state.has_won
                 # Collect data from history
-                for node in game.history:
+                for node in game["history"]:
                     boards.append(node.state.to_numpy())
                     policies.append(node.get_policy())
                     values_list.append(won * node.state.turn)
