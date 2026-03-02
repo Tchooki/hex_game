@@ -11,7 +11,9 @@ from hex_game.ui.board_view import HexBoard
 from hex_game.ui.players import AIPlayer, HumanPlayer
 
 
-def play_ai(run_name: str, n: int = 11, time_limit: float = 1.0) -> None:
+def play_ai(
+    run_name: str, n: int = 11, n_res_block: int = 10, time_limit: float = 1.0
+) -> None:
     """Play against the best model from a run."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = Path("models") / run_name / "best_model.pth"
@@ -21,7 +23,7 @@ def play_ai(run_name: str, n: int = 11, time_limit: float = 1.0) -> None:
         sys.exit(1)
 
     print(f"Loading model from {model_path}")
-    model = HexNet(n=n).to(device)
+    model = HexNet(n=n, n_res_block=n_res_block).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -32,7 +34,7 @@ def play_ai(run_name: str, n: int = 11, time_limit: float = 1.0) -> None:
         player_black=AIPlayer(
             model=model,
             time_limit=time_limit,
-            temperature=1.0,
+            temperature=0.0,
         ),
     )
     game.run()
@@ -45,12 +47,17 @@ def main() -> None:
         "--run", type=str, default="hex11x11", help="Run name for the model"
     )
     parser.add_argument("--size", type=int, default=11, help="Board size")
+    parser.add_argument(
+        "--res-blocks", type=int, default=10, help="Number of residual blocks"
+    )
     parser.add_argument("--time", type=float, default=3.0, help="AI thought time (s)")
 
     args = parser.parse_args()
 
     if args.ai:
-        play_ai(args.run, n=args.size, time_limit=args.time)
+        play_ai(
+            args.run, n=args.size, n_res_block=args.res_blocks, time_limit=args.time
+        )
     else:
         # Default: basic play (Human vs Human)
         HexBoard(

@@ -130,12 +130,13 @@ def train(
     run_name: str = "hex11x11",
     n: int = 11,
     n_res_block: int = 10,
-    n_selfplay_games: int = 10,
+    n_selfplay_games: int = 64,
     n_mcts_iter: int = 100,
     window_size: int = 5,
     n_epochs: int = 10,
     batch_size: int = 32,
     lr: float = 1e-3,
+    n_generations: int = 10,
     data_dir: str = "data",
     models_dir: str = "models",
 ) -> None:
@@ -160,7 +161,7 @@ def train(
     policy_loss_fn = nn.CrossEntropyLoss()
     value_loss_fn = nn.MSELoss()
 
-    while True:  # Continuous training cycles
+    for _ in range(n_generations):
         gen_id = get_next_gen_id(run_name, data_dir)
         print(f"\n--- Starting Generation {gen_id} ---")
 
@@ -172,6 +173,7 @@ def train(
             n_games=n_selfplay_games,
             n_iter=n_mcts_iter,
             save_path=str(gen_data_path),
+            batch_size=batch_size,
         )
 
         # Phase 2: Load data from window
@@ -218,4 +220,5 @@ if __name__ == "__main__":
         n_mcts_iter=20,
         n_epochs=2,
         batch_size=16,
+        n_generations=2,
     )
