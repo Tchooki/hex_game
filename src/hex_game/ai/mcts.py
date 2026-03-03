@@ -462,7 +462,7 @@ def MCTS_multi(
             leaf.backup(values[i].item())
 
 
-def generate_data(  # noqa: PLR0914
+def generate_data(  # noqa: PLR0914, PLR0912
     model: HexNet,
     n_games: int,
     n_random_plays: int = 1,
@@ -518,7 +518,7 @@ def generate_data(  # noqa: PLR0914
 
     while finished_games < n_games:
         # 1. Fill active games up to batch_size
-        while len(active_games) < batch_size and started_games < n_games:
+        while len(active_games) < batch_size and finished_games < n_games:
             board = Board(model.n)
             for _ in range(n_random_plays):
                 board.play_random()
@@ -565,6 +565,9 @@ def generate_data(  # noqa: PLR0914
                 to_remove.append(game)
                 if finished_games % 10 == 0:
                     print(f"Games finished: {finished_games}/{n_games}")
+
+                if finished_games >= n_games:
+                    break
 
         # Remove finished games
         for game in to_remove:
