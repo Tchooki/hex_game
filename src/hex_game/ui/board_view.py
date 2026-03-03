@@ -85,6 +85,7 @@ class HexBoard:
             elif event.type == pygame.MOUSEBUTTONDOWN and (
                 isinstance(self.players[self.board.turn], HumanPlayer)
                 and self.hover_index
+                and self.board.has_won == 0
             ):
                 i, j = self.hover_index
                 index = i * self.n + j
@@ -303,7 +304,7 @@ class HexBoard:
 
     def _draw_pawn(self) -> None:
         """Draw pawns."""
-        if self.can_play and self.hover_index:
+        if self.can_play and self.hover_index and self.board.has_won == 0:
             time_s = pygame.time.get_ticks() / 100
             alpha = (1 + sin(time_s)) / 2
             color = (
@@ -338,12 +339,41 @@ class HexBoard:
                 self.hex_radius / 1.5,
             )
 
+    def _draw_winner(self) -> None:
+        """Draw winner text if game is over."""
+        if self.board.has_won != 0:
+            font = pygame.font.SysFont("Liberation Serif", 64, bold=True)
+            text = (
+                "Les blancs gagnent !"
+                if self.board.has_won == WHITE
+                else "Les noirs gagnent !"
+            )
+            color = (255, 255, 255) if self.board.has_won == WHITE else (0, 0, 0)
+
+            text_surface = font.render(text, True, color)
+
+            bg_surface = pygame.Surface((
+                text_surface.get_width() + 40,
+                text_surface.get_height() + 20,
+            ))
+            bg_surface.fill((128, 128, 128))
+            bg_surface.set_alpha(200)
+
+            rect = text_surface.get_rect(
+                center=(self.screen.get_width() // 2, self.screen.get_height() // 8)
+            )
+            bg_rect = bg_surface.get_rect(center=rect.center)
+
+            self.screen.blit(bg_surface, bg_rect)
+            self.screen.blit(text_surface, rect)
+
     def draw_board(self, debug: bool = False) -> None:
         """Draw board."""
         self._draw_bg()
         self._draw_text()
         self._draw_hex()
         self._draw_pawn()
+        self._draw_winner()
         if debug:
             self._draw_debug()
 
