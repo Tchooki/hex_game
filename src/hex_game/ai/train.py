@@ -5,6 +5,7 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 
+from hex_game.ai.eval import evaluate_models
 from hex_game.ai.mcts import generate_data
 from hex_game.ai.model import HexNet
 
@@ -126,14 +127,14 @@ def train_epoch(
     return avg_loss, avg_loss_p, avg_loss_v
 
 
-def train(
+def train(  # noqa: PLR0914
     run_name: str = "hex11x11",
     n: int = 11,
     n_res_block: int = 10,
     n_selfplay_games: int = 256,
-    n_mcts_iter: int = 100,
+    n_mcts_iter: int = 75,
     window_size: int = 5,
-    n_epochs: int = 10,
+    n_epochs: int = 8,
     batch_size: int = 128,
     lr: float = 1e-3,
     n_generations: int = 50,
@@ -153,9 +154,14 @@ def train(
     model = HexNet(n=n, n_res_block=n_res_block).to(device)
 
     # Load existing best model if it exists
+    champion_model = HexNet(n=n, n_res_block=n_res_block).to(device)
     if best_model_path.exists():
         print(f"Loading best model from {best_model_path}")
-        model.load_state_dict(torch.load(best_model_path, map_location=device))
+        state_dict = torch.load(best_model_path, map_location=device, weights_only=True)
+        model.load_state_dict(state_dict)
+        champion_model.load_state_dict(state_dict)
+
+    champion_model.eval()
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     policy_loss_fn = nn.CrossEntropyLoss()
@@ -206,8 +212,30 @@ def train(
 
         model_path = run_models_dir / f"model_{gen_id}.pth"
         torch.save(model.state_dict(), model_path)
-        torch.save(model.state_dict(), best_model_path)
-        print(f"Model saved as {model_path} and updated best_model.pth")
+        print(f"Model saved as {model_path}")
+
+        print("\n--- Evaluating new model against best model ---")
+        model.eval()
+        challenger_wins, champion_wins, draws = evaluate_models(
+            model_challenger=model,
+            model_champion=champion_model,
+            n_games=40,
+            n_mcts_iter=n_mcts_iter,
+            batch_size=min(40, batch_size),
+        )
+
+        # Win rate for challenger (excluding draws for ratio calculation, or strict > 55% total)
+        total_eval_games = challenger_wins + champion_wins + draws
+        win_rate = challenger_wins / total_eval_games if total_eval_games > 0 else 0
+
+        if win_rate > 0.55:
+            print(f"Challenger won! ({win_rate:.1%}). Updating best_model.pth.")
+            torch.save(model.state_dict(), best_model_path)
+            champion_model.load_state_dict(model.state_dict())
+        else:
+            print(f"Challenger failed ({win_rate:.1%}). Champion retains title.")
+            # Revert model to champion for next generation's data generation
+            model.load_state_dict(champion_model.state_dict())
 
 
 if __name__ == "__main__":
