@@ -145,7 +145,9 @@ class Board:
         return rslt
 
     def to_numpy(
-        self, transform: Callable[[np.ndarray], np.ndarray] | None = None
+        self,
+        transform: Callable[[np.ndarray], np.ndarray] | None = None,
+        canonical: bool = False,
     ) -> np.ndarray:
         """
         Convert board to numpy array.
@@ -153,18 +155,24 @@ class Board:
         Args:
             transform (Callable[[np.ndarray], np.ndarray] | None):
                 transform to apply to the board
+            canonical (bool): if True, transpose the board if turn is BLACK
+                (Black plays Left-Right, so transpose makes it Top-Bottom)
 
         Returns:
             np.ndarray: numpy array representation of the board
 
         """
         b = np.array(self._board).reshape(self.n, -1) * self.turn
+        if canonical and self.turn == BLACK:
+            b = b.T
         if transform:
             b = transform(b)
         return b
 
     def to_tensor(
-        self, transform: Callable[[np.ndarray], np.ndarray] | None = None
+        self,
+        transform: Callable[[np.ndarray], np.ndarray] | None = None,
+        canonical: bool = False,
     ) -> torch.Tensor:
         """
         Convert board to tensor.
@@ -172,14 +180,13 @@ class Board:
         Args:
             transform (Callable[[np.ndarray], np.ndarray] | None):
                 transform to apply to the board
+            canonical (bool): if True, use canonical orientation
 
         Returns:
             torch.Tensor: tensor representation of the board
 
         """
-        b = np.array(self._board).reshape(self.n, -1) * self.turn
-        if transform:
-            b = transform(b)
+        b = self.to_numpy(transform=transform, canonical=canonical)
         t = torch.from_numpy(b.copy()).unsqueeze(0).unsqueeze(0).float()
         if torch.cuda.is_available():
             t = t.cuda()
@@ -215,14 +222,16 @@ class Board:
 
         # Connect to borders
         if self.turn == WHITE:
-            if y == 0:
+            # WHITE connects Row 0 (Top) to Row n-1 (Bottom)
+            if x == 0:
                 self.uf.union(index, self.white_top)
-            if y == self.n - 1:
+            if x == self.n - 1:
                 self.uf.union(index, self.white_bottom)
         else:  # BLACK
-            if x == 0:
+            # BLACK connects Col 0 (Left) to Col n-1 (Right)
+            if y == 0:
                 self.uf.union(index, self.black_left)
-            if x == self.n - 1:
+            if y == self.n - 1:
                 self.uf.union(index, self.black_right)
 
         # Union with neighbors of same color

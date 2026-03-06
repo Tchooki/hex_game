@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING, Any
 import networkx as nx
 import numpy as np
 import torch
+from tqdm import tqdm
 
-from hex_game.game.board import Board
+from hex_game.game.board import BLACK, WHITE, Board
 from hex_game.ui.board_view import HexBoard
 from hex_game.ui.players import QueuePlayer
 
@@ -101,7 +102,7 @@ class RootNode:
         """Action values."""
         return self._children_Q
 
-    def update_children_U(self, c: float = 1.0) -> None:
+    def update_children_U(self, c: float = 2.0) -> None:
         """Update children U."""
         if self.allow_update:
             self._children_U = (
@@ -173,12 +174,26 @@ class RootNode:
         self.is_expanded = True
         actions = self.state.actions()
 
-        for i in range(len(proba_model)):  # Mask illegal move
-            if i not in actions:
-                proba_model[i] = 0.0  # P = 0 (ensures U = 0)
-                self._children_Q[i] = -np.inf  # Q = -inf (double safety)
+        # Mask illegal moves
+        legal_probas = np.zeros_like(proba_model)
+        for a in actions:
+            legal_probas[a] = proba_model[a]
 
-        self.children_P = np.asarray(proba_model)
+        # Normalize
+        sum_p = np.sum(legal_probas)
+        if sum_p > 0:
+            self.children_P = legal_probas / sum_p
+        else:
+            # If all predicted probabilities are 0, use uniform distribution
+            self.children_P = np.zeros_like(proba_model)
+            if actions:
+                self.children_P[actions] = 1.0 / len(actions)
+
+        # Clear Q for illegal moves (safety)
+        self._children_Q[:] = -np.inf
+        for a in actions:
+            self._children_Q[a] = 0.0
+
         self.update_children_U()
 
     def select(self) -> RootNode:
@@ -292,14 +307,12 @@ class Node(RootNode):
 
 
 def get_random_transformation() -> Callable[[np.ndarray], np.ndarray]:
-    """Get random transformation (reflexion along diagonals)."""
-    ref1, ref2 = RNG.random(2) > 0.5
+    """Get random transformation (180 deg rotation)."""
+    rotate = RNG.random() > 0.5
 
     def transform(b: np.ndarray) -> np.ndarray:
-        if ref1:
-            b = b.T
-        if ref2:
-            b = np.rot90(b, 2).T
+        if rotate:
+            b = np.rot90(b, 2)
         return b
 
     return transform
@@ -323,7 +336,10 @@ def perform_model(
     transforms = [get_random_transformation() for _ in range(len(batch_leaves))]
     # Create batch and apply transformations
     states = np.stack(
-        [leaf.state.to_numpy(transforms[i]) for i, leaf in enumerate(batch_leaves)],
+        [
+            leaf.state.to_numpy(transform=transforms[i], canonical=True)
+            for i, leaf in enumerate(batch_leaves)
+        ],
     )
     inputs = torch.from_numpy(states).unsqueeze(1).float()
     if torch.cuda.is_available():
@@ -336,11 +352,17 @@ def perform_model(
     probas_numpy = probas.cpu().numpy()
     values_numpy = values.cpu().squeeze(1).numpy()
 
-    # undo transforms
-    probas_transformed = [
-        transforms[i](probas_numpy[i].reshape(model.n, -1)).reshape(-1)
-        for i in range(len(batch_leaves))
-    ]
+    # undo transforms and canonicalization
+    probas_transformed = []
+    for i, leaf in enumerate(batch_leaves):
+        p = probas_numpy[i].reshape(model.n, model.n)
+        # Undo symmetry transform (in this group T and Rot180 are self-inverse)
+        p = transforms[i](p)
+        # Undo canonical transpose
+        if leaf.state.turn == BLACK:
+            p = p.T
+        probas_transformed.append(p.reshape(-1))
+
     return probas_transformed, values_numpy
 
 
@@ -425,6 +447,7 @@ def MCTS_multi(
     roots: list[RootNode],
     model: HexNet,
     n_iter: int = 100,
+    add_noise: bool = False,
 ) -> None:
     """
     Perform MCTS on multiple roots in parallel (vectorized).
@@ -433,6 +456,7 @@ def MCTS_multi(
         roots (list[RootNode]): List of RootNodes to expand
         model (HexNet): model
         n_iter (int): Number of iterations
+        add_noise (bool): Whether to add Dirichlet noise at the root.
 
     """
     # Filter roots that are already finished (safety)
@@ -447,6 +471,19 @@ def MCTS_multi(
         for i, root in enumerate(to_expand):
             root.expand(probas[i])
             root.backup(values[i].item())
+
+    if add_noise:
+        epsilon = 0.25
+        alpha = 0.3
+        for root in active_roots:
+            actions = root.state.actions()
+            if actions:
+                noise = RNG.dirichlet([alpha] * len(actions))
+                for idx, a in enumerate(actions):
+                    root.children_P[a] = (1 - epsilon) * root.children_P[
+                        a
+                    ] + epsilon * noise[idx]
+                root.update_children_U()
 
     for _ in range(n_iter):
         # 1. Select a leaf for each active root
@@ -470,7 +507,7 @@ def generate_data(  # noqa: PLR0914, PLR0912
     show: bool = False,
     save_path: str | None = None,
     temperature: float = 1.0,
-    temperature_threshold: int = 15,
+    temperature_threshold: int = 60,
     batch_size: int = 16,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -515,6 +552,7 @@ def generate_data(  # noqa: PLR0914, PLR0912
     active_games: list[dict[str, Any]] = []
     finished_games = 0
     started_games = 0
+    pbar = tqdm(total=n_games, desc="Self-play", unit="game") if not show else None
 
     while finished_games < n_games:
         # 1. Fill active games up to batch_size
@@ -537,7 +575,9 @@ def generate_data(  # noqa: PLR0914, PLR0912
             break
 
         # 2. Run MCTS on all active games in one batch
-        MCTS_multi([g["root"] for g in active_games], model, n_iter=n_iter)
+        MCTS_multi(
+            [g["root"] for g in active_games], model, n_iter=n_iter, add_noise=True
+        )
 
         # 3. Sample and play actions for each game
         to_remove = []
@@ -557,14 +597,21 @@ def generate_data(  # noqa: PLR0914, PLR0912
                 won = game["root"].state.has_won
                 # Collect data from history
                 for node in game["history"]:
-                    boards.append(node.state.to_numpy())
-                    policies.append(node.get_policy())
+                    # Canonical view: current player is always 1 and goal is Top-Bottom
+                    b = node.state.to_numpy(canonical=True)
+                    p = node.get_policy()
+                    if node.state.turn == BLACK:
+                        p = p.reshape(model.n, model.n).T.reshape(-1)
+
+                    boards.append(b)
+                    policies.append(p)
+                    # Value is 1 if current player won, -1 if current player lost
                     values_list.append(won * node.state.turn)
 
                 finished_games += 1
                 to_remove.append(game)
-                if finished_games % 10 == 0:
-                    print(f"Games finished: {finished_games}/{n_games}")
+                if pbar:
+                    pbar.update(1)
 
                 if finished_games >= n_games:
                     break
@@ -577,6 +624,9 @@ def generate_data(  # noqa: PLR0914, PLR0912
     boards_array = np.array(boards, dtype=np.float32)
     policies_array = np.array(policies, dtype=np.float32)
     values_array = np.array(values_list, dtype=np.float32)
+
+    if pbar:
+        pbar.close()
 
     if save_path:
         pathlib.Path(save_path).mkdir(exist_ok=True, parents=True)

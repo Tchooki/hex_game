@@ -132,9 +132,9 @@ def train(  # noqa: PLR0914
     n: int = 11,
     n_res_block: int = 10,
     n_selfplay_games: int = 256,
-    n_mcts_iter: int = 75,
+    n_mcts_iter: int = 200,
     window_size: int = 5,
-    n_epochs: int = 8,
+    n_epochs: int = 30,
     batch_size: int = 128,
     lr: float = 1e-3,
     n_generations: int = 50,
@@ -163,13 +163,12 @@ def train(  # noqa: PLR0914
 
     champion_model.eval()
 
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     policy_loss_fn = nn.CrossEntropyLoss()
     value_loss_fn = nn.MSELoss()
 
     for _ in range(n_generations):
         gen_id = get_next_gen_id(run_name, data_dir)
-        print(f"\n--- Starting Generation {gen_id} ---")
+        print(f"\n\n--- Starting Generation {gen_id} ---")
 
         # Phase 1: Generate new data via self-play
         gen_data_path = Path(data_dir) / run_name / f"gen_{gen_id}"
@@ -192,7 +191,7 @@ def train(  # noqa: PLR0914
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         # Phase 3: Train
-        print(f"Training for {n_epochs} epochs...")
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
         total_steps_this_gen = 0
         for epoch in range(1, n_epochs + 1):
             avg_loss, avg_p, avg_v = train_epoch(
@@ -204,10 +203,8 @@ def train(  # noqa: PLR0914
                 device,
             )
             total_steps_this_gen += len(loader)
-
             print(
-                f"Epoch {epoch}/{n_epochs} - Loss: {avg_loss:.4f} "
-                f"(P: {avg_p:.4f}, V: {avg_v:.4f})"
+                f"Epoch {epoch}/{n_epochs} - Loss: {avg_loss:.4f} (p: {avg_p:.4f}, v: {avg_v:.4f})"
             )
 
         model_path = run_models_dir / f"model_{gen_id}.pth"
@@ -216,7 +213,7 @@ def train(  # noqa: PLR0914
 
         print("\n--- Evaluating new model against best model ---")
         model.eval()
-        challenger_wins, champion_wins, draws = evaluate_models(
+        challenger_wins, champion_wins = evaluate_models(
             model_challenger=model,
             model_champion=champion_model,
             n_games=40,
@@ -224,11 +221,11 @@ def train(  # noqa: PLR0914
             batch_size=min(40, batch_size),
         )
 
-        # Win rate for challenger (excluding draws for ratio calculation, or strict > 55% total)
-        total_eval_games = challenger_wins + champion_wins + draws
+        # Win rate for challenger
+        total_eval_games = challenger_wins + champion_wins
         win_rate = challenger_wins / total_eval_games if total_eval_games > 0 else 0
 
-        if win_rate > 0.55:
+        if win_rate >= 0.55:
             print(f"Challenger won! ({win_rate:.1%}). Updating best_model.pth.")
             torch.save(model.state_dict(), best_model_path)
             champion_model.load_state_dict(model.state_dict())
