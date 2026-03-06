@@ -17,6 +17,7 @@ dev = [
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "ruff>=0.15.4",
+    "snakeviz>=2.2.0",
     "types-networkx>=3.6.1.20260210",
 ]
 
