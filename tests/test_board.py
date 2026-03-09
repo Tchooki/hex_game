@@ -11,31 +11,32 @@ def test_union_find():
 
 def test_white_win():
     b = Board(3)
+    # White needs to connect top (row 0) to bottom (row 2)
     # 0 1 2
     #  3 4 5
     #   6 7 8
-    # White needs to connect top (0,1,2) to bottom (6,7,8)
 
-    # Play a vertical line (x=0 to x=2)
-    b.play(0 * 3 + 0)  # (0, 0) W
-    b.play(0 * 3 + 1)  # (0, 1) B
-    b.play(1 * 3 + 0)  # (1, 0) W
-    b.play(1 * 3 + 1)  # (1, 1) B
-    b.play(2 * 3 + 0)  # (2, 0) W
+    # Vertical line in row-major
+    b.play(0)  # (0, 0) W
+    b.play(1)  # (0, 1) B
+    b.play(3)  # (1, 0) W
+    b.play(4)  # (1, 1) B
+    b.play(6)  # (2, 0) W
     # Should be win
     assert b.has_won == WHITE
 
 
 def test_black_win():
     b = Board(3, turn=BLACK)
-    # Black needs to connect left (0,3,6) to right (2,5,8)
+    # Black needs to connect left (col 0) to right (col 2)
 
-    # Play a horizontal line (y=0 to y=2)
-    b.play(0 * 3 + 0)  # (0, 0) B
-    b.play(1 * 3 + 0)  # (1, 0) W
-    b.play(0 * 3 + 1)  # (0, 1) B
-    b.play(1 * 3 + 1)  # (1, 1) W
-    b.play(0 * 3 + 2)  # (0, 2) B
+    # Horizontal line in row-major
+    b.play(3)  # (1, 0) W
+    b.play(0)  # (0, 0) B
+    b.play(4)  # (1, 1) W
+    b.play(1)  # (0, 1) B
+    b.play(5)  # (1, 2) W
+    b.play(2)  # (0, 2) B
     assert b.has_won == BLACK
 
 
@@ -88,9 +89,13 @@ def test_full_board_no_draw():
     # White needs 0->2 or 1->3 (top to bottom)
     # Black needs 0->1 or 2->3 (left to right)
 
-    # Let's fill the board:
-    # W B
-    #  W B
+    # Let's fill the board such that White wins (Top row 0 to Bottom row 1)
+    # Row 0: 0, 1
+    # Row 1: 2, 3
+    # W W
+    # B B (Wait, Col 0: 0, 2; Col 1: 1, 3)
+    # Correct moves for White win (connect Row 0 to Row 1)
+    # (0,0) W, (0,1) B, (1,0) W, (1,1) B
     b.play(0)  # (0,0) W
     b.play(1)  # (0,1) B
     b.play(2)  # (1,0) W

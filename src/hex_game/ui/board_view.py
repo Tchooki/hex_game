@@ -87,8 +87,8 @@ class HexBoard:
                 and self.hover_index
                 and self.board.has_won == 0
             ):
-                i, j = self.hover_index
-                index = i * self.n + j
+                row, col = self.hover_index
+                index = row * self.n + col
                 if self.board.can_play(index):
                     self.pawn_dict[index] = self.board.turn
                     self.board.play(index)
@@ -137,16 +137,16 @@ class HexBoard:
         self.diamond_bottom_right = layout["bottom_right"]
 
         # Update Hex center position
-        for i in range(self.n):
-            t_i = (i + 1) / (self.n + 1)
-            for j in range(self.n):
-                t_j = (j + 1) / (self.n + 1)
-                self.hex_pos[i][j] = (
+        for col in range(self.n):
+            t_col = (col + 1) / (self.n + 1)
+            for row in range(self.n):
+                t_row = (row + 1) / (self.n + 1)
+                self.hex_pos[row][col] = (
                     self.center[0]
-                    - 3 * self.x_val / 4 * (1 - t_i)
-                    + self.x_val / 4 * t_i
-                    + t_j * self.x_val / 2,
-                    self.center[1] + (t_j - 1 / 2) * self.diamond_height,
+                    - 3 * self.x_val / 4 * (1 - t_col)
+                    + self.x_val / 4 * t_col
+                    + t_row * self.x_val / 2,
+                    self.center[1] + (t_row - 1 / 2) * self.diamond_height,
                 )
 
     def _draw_bg(self) -> None:
@@ -294,12 +294,12 @@ class HexBoard:
             "Liberation Serif",
             int(self.diamond_height / (2 * self.n)),
         )
-        for i in range(self.n):
-            for j in range(self.n):
-                index = i * self.n + j
+        for row in range(self.n):
+            for col in range(self.n):
+                index = row * self.n + col
                 color = (0, 0, 0) if self.board[index] >= 0 else (255, 255, 255)
-                num = font.render(str(self.board[index]), True, color)
-                text_rect = num.get_rect(center=self.hex_pos[i][j])
+                num = font.render(str(index), True, color)
+                text_rect = num.get_rect(center=self.hex_pos[row][col])
                 self.screen.blit(num, text_rect)
 
     def _draw_pawn(self) -> None:
@@ -331,11 +331,11 @@ class HexBoard:
         # Draw pawns
         for index, turn in self.pawn_dict.items():
             pawn_color = MAP_COLOR[turn]
-            i, j = divmod(index, self.n)
+            row, col = divmod(index, self.n)
             pygame.draw.circle(
                 self.screen,
                 pawn_color,
-                self.hex_pos[i][j],
+                self.hex_pos[row][col],
                 self.hex_radius / 1.5,
             )
 

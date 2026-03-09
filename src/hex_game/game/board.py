@@ -83,7 +83,7 @@ class Board:
         return chain
 
     def decode_coord(self, key: int) -> tuple[int, int]:
-        """Decode index to (x, y)."""
+        """Decode index to (row, col)."""
         return key // self.n, key % self.n
 
     def get_neighbours(self, index: int) -> list[int]:
@@ -218,20 +218,20 @@ class Board:
             raise ValueError(msg)
 
         self._board[index] = self.turn
-        x, y = self.decode_coord(index)
+        row, col = self.decode_coord(index)
 
         # Connect to borders
         if self.turn == WHITE:
             # WHITE connects Row 0 (Top) to Row n-1 (Bottom)
-            if x == 0:
+            if row == 0:
                 self.uf.union(index, self.white_top)
-            if x == self.n - 1:
+            if row == self.n - 1:
                 self.uf.union(index, self.white_bottom)
         else:  # BLACK
             # BLACK connects Col 0 (Left) to Col n-1 (Right)
-            if y == 0:
+            if col == 0:
                 self.uf.union(index, self.black_left)
-            if y == self.n - 1:
+            if col == self.n - 1:
                 self.uf.union(index, self.black_right)
 
         # Union with neighbors of same color
