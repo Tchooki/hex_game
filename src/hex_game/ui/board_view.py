@@ -69,6 +69,8 @@ class HexBoard:
         self.diamond_bottom_left = (0, 0)
         self.diamond_bottom_right = (0, 0)
 
+        self._window_safey = 0.12 + 1 / (2 * self.n)
+        self._window_safex = 0.05 + 1 / (4 * self.n)
         self.update_window()
 
     def handle_events(self) -> None:
@@ -121,10 +123,12 @@ class HexBoard:
         self.pawn_dict = OrderedDict()
         self.move_count = 0
 
-    def update_window(self, safey: float = 0.12, safex: float = 0.02) -> None:
+    def update_window(self) -> None:
         """Update window settings and positions."""
         width, height = self.screen.get_width(), self.screen.get_height()
-        layout = calculate_diamond_layout(width, height, self.n, safey, safex)
+        layout = calculate_diamond_layout(
+            width, height, self.n, self._window_safey, self._window_safex
+        )
 
         self.radius = layout["radius"]
         self.x_val = layout["x_val"]
