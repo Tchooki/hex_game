@@ -1,6 +1,5 @@
-import os
+import pathlib
 
-import pytest
 import torch
 
 from hex_game.ai.model import HexNet
@@ -25,12 +24,12 @@ def test_model_save_load(tmp_path):
 
     # Save weights
     torch.save(model.state_dict(), save_path)
-    assert os.path.exists(save_path)
+    assert pathlib.Path(save_path).exists()
 
     # Load weights
     model2 = HexNet(n=n, n_res_block=1)
     model2.load_state_dict(torch.load(save_path))
 
     # Check if parameters are equal
-    for p1, p2 in zip(model.parameters(), model2.parameters()):
+    for p1, p2 in zip(model.parameters(), model2.parameters(), strict=True):
         assert torch.equal(p1, p2)

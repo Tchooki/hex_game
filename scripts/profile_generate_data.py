@@ -7,9 +7,7 @@ from hex_game.ai.model import HexNet
 
 
 def profile_generate_data() -> None:
-    """
-    Script pour profiler le processus complet de génération de données (self-play).
-    """
+    """Script pour profiler le processus complet de génération de données (self-play)."""
     n = 11
     # On génère peu de jeux pour le profilage (par ex. 2), mais avec assez d'itérations
     n_games = 2

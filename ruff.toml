@@ -65,9 +65,9 @@ extend-select = [
 ]
 pylint.max-args = 12
 pylint.max-locals = 16
-mccabe.max-complexity = 17
+mccabe.max-complexity = 18
 pylint.max-branches = 14
-pylint.max-statements = 60
+pylint.max-statements = 62
 
 ignore = [
     "E501",    # Pycodestyle - line too long

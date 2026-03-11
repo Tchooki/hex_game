@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from hex_game.game.board import BLACK, WHITE, Board
+from hex_game.game.board import BLACK, Board
 from hex_game.ui.board_view import HexBoard
 from hex_game.ui.players import QueuePlayer
 
