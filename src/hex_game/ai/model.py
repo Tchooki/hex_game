@@ -6,25 +6,25 @@ from torch import nn
 
 
 class ResBlock(nn.Module):
-    def __init__(self, channels: int, hidden_channels: int = 128) -> None:
+    def __init__(self, channels: int = 128) -> None:
         super().__init__()
 
         self.conv1 = nn.Conv2d(
             channels,
-            hidden_channels,
+            channels,
             kernel_size=3,
             padding_mode="zeros",
             padding=1,
         )
-        self.bn1 = nn.BatchNorm2d(hidden_channels)
+        self.bn1 = nn.BatchNorm2d(channels)
         self.conv2 = nn.Conv2d(
-            hidden_channels,
-            hidden_channels,
+            channels,
+            channels,
             kernel_size=3,
             padding_mode="zeros",
             padding=1,
         )
-        self.bn2 = nn.BatchNorm2d(hidden_channels)
+        self.bn2 = nn.BatchNorm2d(channels)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip = x
@@ -40,8 +40,12 @@ class HexNet(nn.Module):
         super().__init__()
         self.n = n
 
-        self.input_block = ResBlock(1)
-        self.blocks = nn.ModuleList([ResBlock(128) for _ in range(n_res_block - 1)])
+        # Initial projection: 1 channel → 128 channels (NOT a ResBlock)
+        self.initial_conv = nn.Conv2d(1, 128, kernel_size=3, padding=1)
+        self.initial_bn = nn.BatchNorm2d(128)
+
+        # Residual tower: 128 → 128 (skip connections work correctly)
+        self.blocks = nn.ModuleList([ResBlock(128) for _ in range(n_res_block)])
 
         # Policy
         self.policy_conv = nn.Conv2d(128, 2, kernel_size=1)
@@ -55,7 +59,7 @@ class HexNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # x (batch, 1, self.n, self.n)
-        x = self.input_block(x)
+        x = F.relu(self.initial_bn(self.initial_conv(x)))
 
         for block in self.blocks:
             x = block(x)
