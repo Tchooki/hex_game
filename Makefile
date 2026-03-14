@@ -12,10 +12,10 @@ mypy:
 check: lint mypy test
 
 play:
-	uv run hex-play
+	uv run play
 
 train:
-	uv run hex-train
+	uv run train
 
 profile:
 	uv run python scripts/profile_mcts.py

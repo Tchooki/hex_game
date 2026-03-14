@@ -26,8 +26,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-hex-play = "hex_game.main:main"
-hex-train = "hex_game.ai.train:train"
+play = "hex_game.main:main"
+train = "hex_game.ai.train:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

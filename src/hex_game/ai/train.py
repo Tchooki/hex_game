@@ -1,3 +1,7 @@
+#!/usr/bin/env uv run python
+
+import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -127,6 +131,23 @@ def train_epoch(
     return avg_loss, avg_loss_p, avg_loss_v
 
 
+def save_config(run_models_dir: Path, config: dict) -> None:
+    """Save training configuration to a JSON file."""
+    config_path = run_models_dir / "config.json"
+    with config_path.open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4)
+    print(f"Config saved to {config_path}")
+
+
+def load_config(run_models_dir: Path) -> dict | None:
+    """Load training configuration from a JSON file."""
+    config_path = run_models_dir / "config.json"
+    if config_path.exists():
+        with config_path.open(encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
 def train(  # noqa: PLR0914
     run_name: str = "hex11x11",
     n: int = 11,
@@ -138,6 +159,7 @@ def train(  # noqa: PLR0914
     batch_size: int = 128,
     lr: float = 1e-3,
     n_generations: int = 50,
+    n_eval_games: int = 100,
     data_dir: str = "data",
     models_dir: str = "models",
 ) -> None:
@@ -216,9 +238,9 @@ def train(  # noqa: PLR0914
         challenger_wins, champion_wins = evaluate_models(
             model_challenger=model,
             model_champion=champion_model,
-            n_games=40,
+            n_games=n_eval_games,
             n_mcts_iter=n_mcts_iter,
-            batch_size=min(40, batch_size),
+            batch_size=min(n_eval_games, batch_size),
         )
 
         # Win rate for challenger
@@ -231,19 +253,80 @@ def train(  # noqa: PLR0914
             champion_model.load_state_dict(model.state_dict())
         else:
             print(f"Challenger failed ({win_rate:.1%}). Champion retains title.")
-            # Revert model to champion for next generation's data generation
-            model.load_state_dict(champion_model.state_dict())
+            # Note: We NO LONGER revert model weights to the champion.
+            # We keep learning from the current weights to avoid discarding progress.
+
+
+def main() -> None:
+    """Main entry point for the training CLI."""
+    parser = argparse.ArgumentParser(description="Parse training args.")
+    parser.add_argument("-m", "--model", required=True, help="name of the model")
+    parser.add_argument("-n", type=int, required=True, help="size of the board")
+    parser.add_argument(
+        "-r", "--n_res_block", type=int, default=10, help="number of residual blocks"
+    )
+    parser.add_argument(
+        "-s",
+        "--n_selfplay_games",
+        type=int,
+        default=256,
+        help="number of selfplay games",
+    )
+    parser.add_argument(
+        "-i", "--n_mcts_iter", type=int, default=200, help="number of mcts iterations"
+    )
+    parser.add_argument("-w", "--window_size", type=int, default=5, help="window size")
+    parser.add_argument(
+        "-e", "--n_epochs", type=int, default=30, help="number of epochs"
+    )
+    parser.add_argument("-b", "--batch_size", type=int, default=128, help="batch size")
+    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    parser.add_argument(
+        "-g", "--n_generations", type=int, default=50, help="number of generations"
+    )
+    parser.add_argument(
+        "-d", "--data_dir", type=str, default="data", help="data directory"
+    )
+    parser.add_argument(
+        "-o", "--models_dir", type=str, default="models", help="models directory"
+    )
+
+    args = parser.parse_args()
+
+    # Persistence logic
+    run_models_dir = Path(args.models_dir) / args.model
+    loaded_config = load_config(run_models_dir)
+
+    train_args = {
+        "run_name": args.model,
+        "n": args.n,
+        "n_res_block": args.n_res_block,
+        "n_selfplay_games": args.n_selfplay_games,
+        "n_mcts_iter": args.n_mcts_iter,
+        "window_size": args.window_size,
+        "n_epochs": args.n_epochs,
+        "batch_size": args.batch_size,
+        "lr": args.lr,
+        "n_generations": args.n_generations,
+        "data_dir": args.data_dir,
+        "models_dir": args.models_dir,
+        "n_eval_games": 100,  # Increased default for better gatekeeping
+    }
+
+    if loaded_config:
+        print(f"Found existing config for '{args.model}'. Overriding CLI arguments.")
+        # Update train_args with loaded config, but keep dirs from CLI if they changed?
+        # Standard AlphaZero practice: stick to the config for model parameters.
+        for k, v in loaded_config.items():
+            if k in train_args:
+                train_args[k] = v
+    else:
+        # Save current config as it's a new run (or first time with persistence)
+        run_models_dir.mkdir(parents=True, exist_ok=True)
+        save_config(run_models_dir, train_args)
+
+    train(**train_args)
 
 
 if __name__ == "__main__":
-    # Small parameters for testing
-    train(
-        run_name="test_run",
-        n=5,
-        n_res_block=5,
-        n_selfplay_games=2,
-        n_mcts_iter=20,
-        n_epochs=2,
-        batch_size=16,
-        n_generations=2,
-    )
+    main()
